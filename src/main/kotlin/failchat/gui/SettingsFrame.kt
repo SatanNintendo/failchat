@@ -108,6 +108,8 @@ class SettingsFrame(
     @Suppress("UNCHECKED_CAST")
     private val ttsVoice = namespace["tts_voice"] as ComboBox<String>
     private val ttsKey = namespace["tts_key"] as PasswordField
+    private val ttsVolume = namespace["tts_volume"] as Slider
+    private val ttsVolumeText = namespace["tts_volume_text"] as Text
 
     // common settings
     private val opacitySlider = namespace["opacity"] as Slider
@@ -170,6 +172,10 @@ class SettingsFrame(
         ttsEnabled.selectedProperty().addListener { _, _, newValue ->
             ttsVoice.isDisable = !newValue
             ttsKey.isDisable = !newValue
+            ttsVolume.isDisable = !newValue
+        }
+        ttsVolume.valueProperty().addListener { _, _, newValue ->
+            ttsVolumeText.text = "${newValue.toInt()}%"
         }
 
         clickTransparency.isDisable = !clickTransparencyEnabled
@@ -315,8 +321,17 @@ class SettingsFrame(
         ttsVoice.value = configuredTtsVoice
         ttsVoice.editor.text = configuredTtsVoice
         ttsKey.text = config.getString(ConfigKeys.Tts.key, "")
+        val configuredTtsVolume = try {
+            config.getDouble(ConfigKeys.Tts.volume)
+        } catch (t: Throwable) {
+            logger.warn("Invalid TTS volume; using default", t)
+            1.0
+        }
+        ttsVolume.value = (configuredTtsVolume.coerceIn(0.0, 1.0) * 100.0)
+        ttsVolumeText.text = "${ttsVolume.value.toInt()}%"
         ttsVoice.isDisable = !ttsEnabled.isSelected
         ttsKey.isDisable = !ttsEnabled.isSelected
+        ttsVolume.isDisable = !ttsEnabled.isSelected
 
         val userIds = config.getStringArray(ConfigKeys.ignore)
         ignoreList.text = if (userIds.isEmpty()) {
@@ -377,6 +392,7 @@ class SettingsFrame(
         config.setProperty(ConfigKeys.Tts.enabled, ttsEnabled.isSelected)
         config.setProperty(ConfigKeys.Tts.voice, configuredTtsVoice.ifEmpty { "Alena" })
         config.setProperty(ConfigKeys.Tts.key, ttsKey.text.trim())
+        config.setProperty(ConfigKeys.Tts.volume, (ttsVolume.value / 100.0).coerceIn(0.0, 1.0))
 
         config.setProperty(ConfigKeys.ignore, ignoreList.text.split("\n").dropLastWhile { it.isEmpty() }.toTypedArray())
     }

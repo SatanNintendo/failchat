@@ -270,6 +270,37 @@
                                                                 <Insets bottom="4.0"/>
                                                             </VBox.margin>
                                                         </HBox>
+                                                        <HBox alignment="CENTER_LEFT">
+                                                            <children>
+                                                                <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                                      text="Volume:">
+                                                                    <font>
+                                                                        <Font size="12.0"/>
+                                                                    </font>
+                                                                    <HBox.margin>
+                                                                        <Insets right="8.0"/>
+                                                                    </HBox.margin>
+                                                                </Text>
+                                                                <Slider fx:id="tts_volume" blockIncrement="5.0"
+                                                                        max="100.0" min="0.0" value="100.0"
+                                                                        prefWidth="180.0" showTickLabels="false"
+                                                                        showTickMarks="false">
+                                                                </Slider>
+                                                                <Text fx:id="tts_volume_text" strokeType="OUTSIDE"
+                                                                      strokeWidth="0.0" text="100%"
+                                                                      wrappingWidth="42.0">
+                                                                    <font>
+                                                                        <Font size="12.0"/>
+                                                                    </font>
+                                                                    <HBox.margin>
+                                                                        <Insets left="8.0"/>
+                                                                    </HBox.margin>
+                                                                </Text>
+                                                            </children>
+                                                            <VBox.margin>
+                                                                <Insets bottom="4.0"/>
+                                                            </VBox.margin>
+                                                        </HBox>
                                                         <Text strokeType="OUTSIDE" strokeWidth="0.0"
                                                               text="The current StreamElements speech endpoint requires an auth key. Paste either the authToken or your full JWT; JWTs are parsed locally. The key is stored in user.properties, so do not share that file. The voice field accepts any provider voice ID."
                                                               wrappingWidth="385.0">

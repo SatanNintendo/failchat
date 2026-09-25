@@ -125,11 +125,13 @@ class TtsService(
 
             if (voice.isEmpty() || key.isEmpty() || apiUrl.isEmpty()) continue
 
+            val volume = readVolume()
+
             var tempFile: Path? = null
             try {
                 tempFile = client.synthesize(text, voice, key, apiUrl)
                 if (!stopped.get() && guiAvailable() && isEnabled()) {
-                    playBlocking(tempFile)
+                    playBlocking(tempFile, volume)
                 }
             } catch (t: Throwable) {
                 // Network/service/media failures are isolated from chat processing.
@@ -146,7 +148,7 @@ class TtsService(
         }
     }
 
-    private fun playBlocking(audioFile: Path) {
+    private fun playBlocking(audioFile: Path, volume: Double) {
         val cancelled = AtomicBoolean(false)
         val startedLatch = CountDownLatch(1)
         val finishedLatch = CountDownLatch(1)
@@ -171,6 +173,7 @@ class TtsService(
                     }
 
                     currentPlayer = player
+                    player.volume = volume
 
                     player.setOnReady {
                         if (stopped.get() || cancelled.get()) {
@@ -234,6 +237,15 @@ class TtsService(
             if (currentPlaybackLatch === finishedLatch) {
                 currentPlaybackLatch = null
             }
+        }
+    }
+
+    private fun readVolume(): Double {
+        return try {
+            configuration.getDouble(ConfigKeys.Tts.volume).coerceIn(0.0, 1.0)
+        } catch (t: Throwable) {
+            logger.debug("Invalid TTS volume setting; using default", t)
+            1.0
         }
     }
 

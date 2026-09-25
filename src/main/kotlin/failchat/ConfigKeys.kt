@@ -54,6 +54,7 @@ object ConfigKeys {
         const val enabled = "tts.enabled"
         const val voice = "tts.voice"
         const val key = "tts.key"
+        const val volume = "tts.volume"
         const val apiUrl = "tts.api-url"
         const val maxCharacters = "tts.max-characters"
         const val queueCapacity = "tts.queue-capacity"
