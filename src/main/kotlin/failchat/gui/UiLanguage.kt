@@ -68,11 +68,11 @@ object UiLanguage {
                 val properties = Properties()
                 properties.load(input)
                 currentCodeValue = optionFor(properties.getProperty(ConfigKeys.language, ENGLISH)).code
-                currentBundle = loadBundle(currentCodeValue)
+                currentBundle = loadBundleSafely(currentCodeValue)
             }
         } catch (_: Throwable) {
             currentCodeValue = ENGLISH
-            currentBundle = loadBundle(ENGLISH)
+            currentBundle = loadBundleSafely(ENGLISH)
         }
     }
 
