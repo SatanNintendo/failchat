@@ -4,6 +4,7 @@ import failchat.ConfigKeys
 import failchat.failchatHomePath
 import org.apache.commons.configuration2.Configuration
 import java.util.Collections
+import java.util.Enumeration
 import java.util.IdentityHashMap
 import java.util.Locale
 import java.util.Properties
@@ -46,7 +47,7 @@ object UiLanguage {
     private var currentCodeValue = ENGLISH
 
     @Volatile
-    private var currentBundle: ResourceBundle = loadBundle(ENGLISH)
+    private var currentBundle: ResourceBundle = loadBundleSafely(ENGLISH)
 
     fun initialize(config: Configuration) {
         val configuredCode = try {
@@ -90,7 +91,7 @@ object UiLanguage {
 
         config.setProperty(ConfigKeys.language, normalizedCode)
         currentCodeValue = normalizedCode
-        currentBundle = loadBundle(normalizedCode)
+        currentBundle = loadBundleSafely(normalizedCode)
 
         if (notifyListeners && changed) {
             listeners.forEach { listener ->
@@ -195,8 +196,22 @@ object UiLanguage {
             .trim('-')
     }
 
-    private fun loadBundle(code: String): ResourceBundle {
+    private fun loadBundleSafely(code: String): ResourceBundle {
         val locale = Locale.forLanguageTag(code)
-        return ResourceBundle.getBundle("i18n.messages", locale)
+        return try {
+            ResourceBundle.getBundle("i18n.messages", locale)
+        } catch (_: Throwable) {
+            EmptyResourceBundle
+        }
+    }
+
+    /**
+     * English fallback used when translation resources are unavailable.
+     * A broken/missing optional language resource must never prevent Failchat from starting.
+     */
+    private object EmptyResourceBundle : ResourceBundle() {
+        override fun handleGetObject(key: String): Any? = null
+
+        override fun getKeys(): Enumeration<String> = Collections.emptyEnumeration()
     }
 }

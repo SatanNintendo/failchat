@@ -342,6 +342,7 @@
                                     <directory>${basedir}/src/main/external-resources</directory>
                                     <excludes>
                                         <exclude>failchat.bat</exclude>
+                                        <exclude>failchat-debug.bat</exclude>
                                         <exclude>failchat.sh</exclude>
                                     </excludes>
                                 </resource>
@@ -373,6 +374,7 @@
                                     <filtering>true</filtering>
                                     <includes>
                                         <include>failchat.bat</include>
+                                        <include>failchat-debug.bat</include>
                                         <include>failchat.sh</include>
                                     </includes>
                                 </resource>
