@@ -228,7 +228,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          mvn --batch-mode --no-transfer-progress package -DskipTests
+          mvn --batch-mode --no-transfer-progress package -Dmaven.test.skip=true
 
       - name: Verify package
         shell: powershell
