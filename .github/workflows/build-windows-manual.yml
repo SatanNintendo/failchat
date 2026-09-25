@@ -246,8 +246,55 @@ jobs:
             throw "Expected exactly one failchat ZIP, found $($packages.Count)"
           }
 
+          $package = $packages[0]
           Write-Host "Package:"
-          Write-Host $packages[0].FullName
+          Write-Host $package.FullName
+
+          $verifyDir = Join-Path $env:RUNNER_TEMP 'failchat-package-check'
+          if (Test-Path $verifyDir) {
+            Remove-Item -LiteralPath $verifyDir -Recurse -Force
+          }
+
+          Expand-Archive -Path $package.FullName -DestinationPath $verifyDir -Force
+
+          $root = Get-ChildItem -Path $verifyDir -Directory | Select-Object -First 1
+          if (-not $root) {
+            throw 'Could not find the Failchat distribution directory inside the ZIP.'
+          }
+
+          $javaw = Join-Path $root.FullName 'runtime\bin\javaw.exe'
+          $java = Join-Path $root.FullName 'runtime\bin\java.exe'
+          $agent = Join-Path $root.FullName 'java-agents\transparent-webview-patch.jar'
+          $launcher = Join-Path $root.FullName 'failchat.bat'
+          $debugLauncher = Join-Path $root.FullName 'failchat-debug.bat'
+
+          foreach ($requiredFile in @($javaw, $java, $agent, $launcher, $debugLauncher)) {
+            if (-not (Test-Path $requiredFile)) {
+              throw "Required packaged file is missing: $requiredFile"
+            }
+          }
+
+          $jar = Get-ChildItem -Path $root.FullName -Filter 'failchat-*.jar' -File | Select-Object -First 1
+          if (-not $jar) {
+            throw 'Failchat JAR was not found in the package.'
+          }
+
+          $jarEntries = & jar tf $jar.FullName
+          if (-not ($jarEntries -contains 'i18n/messages.properties')) {
+            throw 'i18n/messages.properties is missing from the Failchat JAR.'
+          }
+          if (-not ($jarEntries -contains 'i18n/messages_ru.properties')) {
+            throw 'i18n/messages_ru.properties is missing from the Failchat JAR.'
+          }
+
+          Write-Host 'Package contents verified:'
+          Write-Host "  $javaw"
+          Write-Host "  $java"
+          Write-Host "  $agent"
+          Write-Host "  $launcher"
+          Write-Host "  $debugLauncher"
+          Write-Host '  i18n/messages.properties'
+          Write-Host '  i18n/messages_ru.properties'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
