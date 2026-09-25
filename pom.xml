@@ -416,6 +416,7 @@
                         <include>config/**</include>
                         <include>icons/**</include>
                         <include>fx/**</include>
+                        <include>i18n/**</include>
                     </includes>
                 </configuration>
             </plugin>
