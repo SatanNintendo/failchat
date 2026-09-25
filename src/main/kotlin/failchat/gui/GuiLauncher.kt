@@ -84,16 +84,16 @@ class GuiLauncher : Application() {
         deps.get()!!.releaseChecker.checkNewRelease { release ->
             Platform.runLater {
                 val notification = Alert(AlertType.CONFIRMATION).apply {
-                    title = "Update notification"
+                    title = UiLanguage.text("dialog.update.title")
                     headerText = null
                     graphic = null
-                    contentText = "New release available: ${release.version}"
+                    contentText = UiLanguage.text("dialog.update.content") + release.version
                 }
                 val stage = notification.dialogPane.scene.window as Stage
                 stage.icons.setAll(Images.appIcon)
 
-                val changelogButton = ButtonType("Download", OK_DONE)
-                val closeButton = ButtonType("Close", ButtonData.CANCEL_CLOSE)
+                val changelogButton = ButtonType(UiLanguage.text("dialog.update.download"), OK_DONE)
+                val closeButton = ButtonType(UiLanguage.text("dialog.close"), ButtonData.CANCEL_CLOSE)
                 notification.buttonTypes.setAll(changelogButton, closeButton)
 
                 val result = notification.showAndWait().get()

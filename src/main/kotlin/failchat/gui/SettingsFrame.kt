@@ -8,6 +8,7 @@ import javafx.application.Application
 import javafx.collections.FXCollections
 import javafx.fxml.FXMLLoader
 import javafx.scene.Scene
+import javafx.scene.Parent
 import javafx.scene.control.Alert
 import javafx.scene.control.Alert.AlertType.WARNING
 import javafx.scene.control.Button
@@ -145,13 +146,29 @@ class SettingsFrame(
     // Ignore list tab
     private val ignoreList = namespace["ignore_list"] as TextArea
 
+    @Suppress("UNCHECKED_CAST")
+    private val languageSelector = namespace["language_selector"] as ComboBox<UiLanguage.LanguageOption>
+    private val opacityText = namespace["opacity_text"] as Text
 
     private val startButton = namespace["start_button"] as Button
+
+    private var emoticonsLoading = false
+    private var resetConfigurationRequested = false
 
 
     init {
         stage.scene = scene
         stage.title = "failchat v" + config.getString("version")
+
+        languageSelector.items.setAll(UiLanguage.options)
+        languageSelector.value = UiLanguage.currentOption()
+        languageSelector.valueProperty().addListener { _, _, newValue ->
+            if (newValue != null) {
+                UiLanguage.setLanguage(config, newValue.code)
+            }
+        }
+        UiLanguage.addListener(::applyLocalization)
+        applyLocalization()
         stage.icons.setAll(Images.appIcon)
 
         goodgameEnabled.selectedProperty().addListener { _, _, newValue ->
@@ -187,7 +204,6 @@ class SettingsFrame(
         }
 
 
-        val opacityText = namespace["opacity_text"] as Text
         opacitySlider.valueProperty().addListener { _, _, newValue ->
             opacityText.text = Integer.toString(newValue.toInt())
         }
@@ -230,28 +246,30 @@ class SettingsFrame(
     }
 
     fun enableRefreshEmoticonsButton() {
+        emoticonsLoading = false
         reloadEmoticonsIndicator.isVisible = false
         reloadEmoticonsButton.isDisable = false
-        reloadEmoticonsButton.text = "Reload emoticons"
+        updateDynamicLocalization()
     }
 
     fun disableRefreshEmoticonsButton() {
+        emoticonsLoading = true
         reloadEmoticonsIndicator.isVisible = true
         reloadEmoticonsButton.isDisable = true
-        reloadEmoticonsButton.text = "Loading emoticons"
+        updateDynamicLocalization()
     }
 
     /** @return true if user confirmed the reset. */
     fun confirmConfigReset(): Boolean {
         val notification = Alert(WARNING).apply {
-            title = "Reset confirmation"
-            headerText = "Are you sure you want to reset the configuration?"
+            title = UiLanguage.text("dialog.reset.title")
+            headerText = UiLanguage.text("dialog.reset.content")
         }
         val stage = notification.dialogPane.scene.window as Stage
         stage.icons.setAll(Images.appIcon)
 
-        val okButton = ButtonType("OK", OK_DONE)
-        val closeButton = ButtonType("Cancel", CANCEL_CLOSE)
+        val okButton = ButtonType(UiLanguage.text("dialog.ok"), OK_DONE)
+        val closeButton = ButtonType(UiLanguage.text("dialog.cancel"), CANCEL_CLOSE)
         notification.buttonTypes.setAll(okButton, closeButton)
 
         val result = notification.showAndWait().get()
@@ -260,14 +278,16 @@ class SettingsFrame(
     }
 
     fun disableResetConfigurationButton() {
+        resetConfigurationRequested = true
         resetConfigurationButton.apply {
             isDisable = true
-            text = "Restart the application"
             textFill = Color.ORANGERED
         }
+        updateDynamicLocalization()
     }
 
     fun updateSettingsValues() {
+        languageSelector.value = UiLanguage.optionFor(config.getString(ConfigKeys.language, UiLanguage.ENGLISH))
         goodgameChannel.text = config.getString(ConfigKeys.Goodgame.channel)
         twitchChannel.text = config.getString(ConfigKeys.Twitch.channel)
         youtubeChannel.text = config.getString(ConfigKeys.Youtube.channel)
@@ -393,8 +413,32 @@ class SettingsFrame(
         config.setProperty(ConfigKeys.Tts.voice, configuredTtsVoice.ifEmpty { "Alena" })
         config.setProperty(ConfigKeys.Tts.key, ttsKey.text.trim())
         config.setProperty(ConfigKeys.Tts.volume, (ttsVolume.value / 100.0).coerceIn(0.0, 1.0))
+        config.setProperty(ConfigKeys.language, languageSelector.value?.code ?: UiLanguage.ENGLISH)
 
         config.setProperty(ConfigKeys.ignore, ignoreList.text.split("\n").dropLastWhile { it.isEmpty() }.toTypedArray())
+    }
+
+    private fun applyLocalization() {
+        UiLanguage.localize(
+            scene.root as Parent,
+            setOf(ttsVolumeText, opacityText, reloadEmoticonsButton, resetConfigurationButton)
+        )
+        updateDynamicLocalization()
+    }
+
+    private fun updateDynamicLocalization() {
+        reloadEmoticonsButton.text = if (emoticonsLoading) {
+            UiLanguage.text("settings.loading-emoticons")
+        } else {
+            UiLanguage.text("settings.reload-emoticons")
+        }
+        resetConfigurationButton.text = if (resetConfigurationRequested) {
+            UiLanguage.text("settings.restart-application")
+        } else {
+            UiLanguage.text("settings.reset-configuration")
+        }
+        ttsVolumeText.text = "${ttsVolume.value.toInt()}%"
+        opacityText.text = Integer.toString(opacitySlider.value.toInt())
     }
 
     private fun parseZoomPercent(zoomPercent: String): Int {

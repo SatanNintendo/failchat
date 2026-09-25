@@ -52,13 +52,16 @@ class ChatFrame(
     private val chatScene: Scene = buildChatScene()
 
     // context menu
-    private val switchDecorationsItem: CheckMenuItem = CheckMenuItem("Show frame")
-    private val onTopItem: CheckMenuItem = CheckMenuItem("On top")
-    private val clickTransparencyItem: CheckMenuItem = CheckMenuItem("Click through the window")
-    private val viewersItem: CheckMenuItem = CheckMenuItem("Show viewers")
+    private val switchDecorationsItem: CheckMenuItem = CheckMenuItem()
+    private val onTopItem: CheckMenuItem = CheckMenuItem()
+    private val clickTransparencyItem: CheckMenuItem = CheckMenuItem()
+    private val viewersItem: CheckMenuItem = CheckMenuItem()
+    private val zoomLabelText = Text()
     private val zoomValueText = Text("???")
     private val zoomValues = listOf(25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500) //chrome-alike
-    private val showHiddenMessages: CheckMenuItem = CheckMenuItem("Show hidden messages")
+    private val showHiddenMessages: CheckMenuItem = CheckMenuItem()
+    private val clearChatItem = MenuItem()
+    private val closeChatItem = MenuItem()
 
     // hot keys
     private val switchDecorationsKey = KeyCode.F
@@ -74,7 +77,9 @@ class ChatFrame(
 
     init {
         if (skins.isEmpty()) throw IllegalArgumentException("Empty skins")
+        UiLanguage.addListener(::updateLocalization)
         buildContextMenu()
+        updateLocalization()
     }
 
     fun show() {
@@ -153,15 +158,11 @@ class ChatFrame(
 
         val minusButton = Button("-").configureZoomButton()
         val plusButton = Button("+").configureZoomButton()
-        val zoomBox = HBox(Text("Zoom"), minusButton, zoomValueText, Text("%"), plusButton).apply {
+        val zoomBox = HBox(zoomLabelText, minusButton, zoomValueText, Text("%"), plusButton).apply {
             alignment = Pos.CENTER_LEFT
             padding = Insets(0.0, 0.0, 0.0, 15.0)
         }
         val zoomItem = CustomMenuItem(zoomBox, false)
-
-        val clearChatItem = MenuItem("Clear chat")
-        val closeChatItem = MenuItem("Close chat")
-
 
         // Shortcuts
         switchDecorationsItem.accelerator = KeyCombination.valueOf(switchDecorationsKey.name)
@@ -347,6 +348,17 @@ class ChatFrame(
             config.setProperty("chat.x", stage.x.toInt())
             config.setProperty("chat.y", stage.y.toInt())
         }
+    }
+
+    private fun updateLocalization() {
+        switchDecorationsItem.text = UiLanguage.text("chat.menu.show-frame")
+        onTopItem.text = UiLanguage.text("chat.menu.on-top")
+        clickTransparencyItem.text = UiLanguage.text("chat.menu.click-through")
+        viewersItem.text = UiLanguage.text("chat.menu.show-viewers")
+        showHiddenMessages.text = UiLanguage.text("chat.menu.show-hidden-messages")
+        zoomLabelText.text = UiLanguage.text("chat.menu.zoom")
+        clearChatItem.text = UiLanguage.text("chat.menu.clear-chat")
+        closeChatItem.text = UiLanguage.text("chat.menu.close-chat")
     }
 
     private fun updateContextMenu() {

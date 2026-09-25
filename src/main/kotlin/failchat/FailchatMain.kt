@@ -72,6 +72,7 @@ fun main0(args: Array<String>) {
 
     val config: Configuration = deps.configuration
     handleProgramArguments(cmd, config)
+    UiLanguage.initialize(config)
 
     val guiMode = GuiMode.valueOf(config.getString("gui-mode"))
     runGui(guiMode, deps)

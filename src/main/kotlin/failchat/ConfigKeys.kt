@@ -41,6 +41,7 @@ object ConfigKeys {
         const val showStatusMessages = "$prefix.show-status-messages"
     }
 
+    const val language = "language"
     const val skin = "skin"
     const val frame = "frame"
     const val onTop = "on-top"
