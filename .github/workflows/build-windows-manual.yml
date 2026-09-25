@@ -25,27 +25,108 @@ jobs:
       - name: Install project JDK
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+
           $jdkVersion = '11.0.22+12'
-          $jdkName = 'bellsoft-jdk11.0.22+12-windows-amd64-full'
-          $jdkArchive = Join-Path $env:RUNNER_TEMP "$jdkName.zip"
-          $jdkUrl = "https://download.bell-sw.com/java/$jdkVersion/$jdkName.zip"
-          $jdkRoot = Join-Path $env:GITHUB_WORKSPACE "jdk\$jdkName"
+          $jdkArchiveName = 'bellsoft-jdk11.0.22+12-windows-amd64-full'
+          $jdkArchive = Join-Path $env:RUNNER_TEMP "$jdkArchiveName.zip"
 
-          Invoke-WebRequest -Uri $jdkUrl -OutFile $jdkArchive
-          New-Item -ItemType Directory -Force -Path (Join-Path $env:GITHUB_WORKSPACE 'jdk') | Out-Null
-          Expand-Archive -Path $jdkArchive -DestinationPath (Join-Path $env:GITHUB_WORKSPACE 'jdk') -Force
+          $jdkUrl = "https://download.bell-sw.com/java/$jdkVersion/$jdkArchiveName.zip"
 
-          if (-not (Test-Path (Join-Path $jdkRoot 'jmods'))) {
-            throw "Expected Liberica JDK directory was not found: $jdkRoot"
+          $jdkBase = Join-Path $env:GITHUB_WORKSPACE 'jdk'
+          $expectedJdkRoot = Join-Path $jdkBase $jdkArchiveName
+
+          Write-Host "Downloading Liberica JDK:"
+          Write-Host $jdkUrl
+
+          New-Item -ItemType Directory -Force -Path $jdkBase | Out-Null
+
+          Invoke-WebRequest `
+            -Uri $jdkUrl `
+            -OutFile $jdkArchive `
+            -UseBasicParsing
+
+          Write-Host "Extracting JDK archive..."
+
+          Expand-Archive `
+            -Path $jdkArchive `
+            -DestinationPath $jdkBase `
+            -Force
+
+          Write-Host "Searching for JDK directory containing jmods..."
+
+          $jmodsDirectory = Get-ChildItem `
+            -Path $jdkBase `
+            -Directory `
+            -Filter 'jmods' `
+            -Recurse `
+            -ErrorAction Stop |
+            Select-Object -First 1
+
+          if (-not $jmodsDirectory) {
+            Write-Host "Contents of JDK directory:"
+            Get-ChildItem -Path $jdkBase -Force -Recurse |
+              Select-Object FullName, Length |
+              Format-Table -AutoSize
+
+            throw "Could not find a jmods directory inside the downloaded Liberica JDK."
           }
 
-          "JAVA_HOME=$jdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $jdkRoot = $jmodsDirectory.Parent.FullName
+
+          Write-Host "Detected JDK root:"
+          Write-Host $jdkRoot
+
+          Write-Host "Detected jmods:"
+          Write-Host $jmodsDirectory.FullName
+
+          if (-not (Test-Path (Join-Path $jdkRoot 'bin\java.exe'))) {
+            throw "Detected JDK directory does not contain bin\java.exe: $jdkRoot"
+          }
+
+          if (-not (Test-Path (Join-Path $jdkRoot 'bin\jlink.exe'))) {
+            throw "Detected JDK directory does not contain bin\jlink.exe: $jdkRoot"
+          }
+
+          if ($jdkRoot.TrimEnd('\') -ne $expectedJdkRoot.TrimEnd('\')) {
+            Write-Host "Creating compatibility junction for the path expected by pom.xml..."
+
+            if (Test-Path $expectedJdkRoot) {
+              Remove-Item -LiteralPath $expectedJdkRoot -Recurse -Force
+            }
+
+            New-Item `
+              -ItemType Junction `
+              -Path $expectedJdkRoot `
+              -Target $jdkRoot | Out-Null
+          }
+
+          if (-not (Test-Path (Join-Path $expectedJdkRoot 'jmods'))) {
+            throw "Compatibility JDK path was not created correctly: $expectedJdkRoot"
+          }
+
+          "JAVA_HOME=$jdkRoot" |
+            Out-File `
+              -FilePath $env:GITHUB_ENV `
+              -Encoding utf8 `
+              -Append
+
           $jdkRootBin = Join-Path $jdkRoot 'bin'
-          $jdkRootBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          $jdkRootBin |
+            Out-File `
+              -FilePath $env:GITHUB_PATH `
+              -Encoding utf8 `
+              -Append
+
+          Write-Host "JAVA_HOME set to:"
+          Write-Host $jdkRoot
 
       - name: Verify build tools
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+
           java -version
           jlink --version
           mvn -version
@@ -53,7 +134,10 @@ jobs:
       - name: Prepare private configuration for packaging
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+
           $privateConfig = 'src/main/resources/config/private.properties'
+
           if (-not (Test-Path $privateConfig)) {
             @(
               'twitch.bot-name='
@@ -66,15 +150,23 @@ jobs:
       - name: Build distribution
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+
           mvn --batch-mode --no-transfer-progress package -DskipTests
 
       - name: Verify package
         shell: powershell
         run: |
-          $packages = @(Get-ChildItem -Path 'target' -Filter 'failchat-v*.zip' -File)
+          $ErrorActionPreference = 'Stop'
+
+          $packages = @(
+            Get-ChildItem -Path 'target' -Filter 'failchat-v*.zip' -File
+          )
+
           if ($packages.Count -ne 1) {
             throw "Expected exactly one failchat distribution ZIP, found $($packages.Count)"
           }
+
           Write-Host "Built package: $($packages[0].FullName)"
           Write-Host "Size: $($packages[0].Length) bytes"
 
