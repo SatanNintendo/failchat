@@ -1,0 +1,87 @@
+name: Manual Windows x64 build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Install project JDK
+        shell: powershell
+        run: |
+          $jdkVersion = '11.0.22+12'
+          $jdkName = 'bellsoft-jdk11.0.22+12-windows-amd64-full'
+          $jdkArchive = Join-Path $env:RUNNER_TEMP "$jdkName.zip"
+          $jdkUrl = "https://download.bell-sw.com/java/$jdkVersion/$jdkName.zip"
+          $jdkRoot = Join-Path $env:GITHUB_WORKSPACE "jdk\$jdkName"
+
+          Invoke-WebRequest -Uri $jdkUrl -OutFile $jdkArchive
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:GITHUB_WORKSPACE 'jdk') | Out-Null
+          Expand-Archive -Path $jdkArchive -DestinationPath (Join-Path $env:GITHUB_WORKSPACE 'jdk') -Force
+
+          if (-not (Test-Path (Join-Path $jdkRoot 'jmods'))) {
+            throw "Expected Liberica JDK directory was not found: $jdkRoot"
+          }
+
+          "JAVA_HOME=$jdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $jdkRootBin = Join-Path $jdkRoot 'bin'
+          $jdkRootBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify build tools
+        shell: powershell
+        run: |
+          java -version
+          jlink --version
+          mvn -version
+
+      - name: Prepare private configuration for packaging
+        shell: powershell
+        run: |
+          $privateConfig = 'src/main/resources/config/private.properties'
+          if (-not (Test-Path $privateConfig)) {
+            @(
+              'twitch.bot-name='
+              'twitch.bot-password='
+              'twitch.client-id='
+              'twitch.client-secret='
+            ) | Set-Content -Path $privateConfig -Encoding utf8
+          }
+
+      - name: Build distribution
+        shell: powershell
+        run: |
+          mvn --batch-mode --no-transfer-progress package -DskipTests
+
+      - name: Verify package
+        shell: powershell
+        run: |
+          $packages = @(Get-ChildItem -Path 'target' -Filter 'failchat-v*.zip' -File)
+          if ($packages.Count -ne 1) {
+            throw "Expected exactly one failchat distribution ZIP, found $($packages.Count)"
+          }
+          Write-Host "Built package: $($packages[0].FullName)"
+          Write-Host "Size: $($packages[0].Length) bytes"
+
+      - name: Upload distribution
+        uses: actions/upload-artifact@v7
+        with:
+          name: failchat-windows-x64
+          path: target/failchat-v*.zip
+          if-no-files-found: error
+          retention-days: 14
