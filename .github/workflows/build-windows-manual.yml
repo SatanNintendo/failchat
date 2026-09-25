@@ -13,7 +13,7 @@ runs-on: windows-latest
 ```
 steps:
   - name: Checkout
-    uses: actions/checkout@v7
+    uses: actions/checkout@v4
 
   - name: Cache Maven dependencies
     uses: actions/cache@v4
@@ -23,20 +23,20 @@ steps:
       restore-keys: |
         ${{ runner.os }}-maven-
 
-  - name: Install project JDK
+  - name: Install Liberica JDK 11
     shell: powershell
     run: |
       $ErrorActionPreference = 'Stop'
 
       $jdkVersion = '11.0.22+12'
-      $jdkArchiveName = 'bellsoft-jdk11.0.22+12-windows-amd64-full'
-      $jdkArchive = Join-Path $env:RUNNER_TEMP "$jdkArchiveName.zip"
+      $jdkName = 'bellsoft-jdk11.0.22+12-windows-amd64-full'
+      $jdkArchive = Join-Path $env:RUNNER_TEMP "$jdkName.zip"
+      $jdkUrl = "https://download.bell-sw.com/java/$jdkVersion/$jdkName.zip"
 
-      $jdkUrl = "https://download.bell-sw.com/java/$jdkVersion/$jdkArchiveName.zip"
       $jdkBase = Join-Path $env:GITHUB_WORKSPACE 'jdk'
-      $expectedJdkRoot = Join-Path $jdkBase $jdkArchiveName
+      $expectedJdkRoot = Join-Path $jdkBase $jdkName
 
-      Write-Host "Downloading Liberica JDK:"
+      Write-Host "Downloading:"
       Write-Host $jdkUrl
 
       New-Item -ItemType Directory -Force -Path $jdkBase | Out-Null
@@ -46,60 +46,46 @@ steps:
         -OutFile $jdkArchive `
         -UseBasicParsing
 
-      Write-Host "Extracting JDK archive..."
+      Write-Host "Extracting JDK..."
 
       Expand-Archive `
         -Path $jdkArchive `
         -DestinationPath $jdkBase `
         -Force
 
-      Write-Host "Searching for JDK directory containing jmods..."
+      Write-Host "Finding JDK root..."
 
-      $jmodsDirectory = Get-ChildItem `
+      $jmods = Get-ChildItem `
         -Path $jdkBase `
         -Directory `
         -Filter 'jmods' `
-        -Recurse `
-        -ErrorAction Stop |
+        -Recurse |
         Select-Object -First 1
 
-      if (-not $jmodsDirectory) {
-        Write-Host "Contents of JDK directory:"
+      if (-not $jmods) {
+        Get-ChildItem -Path $jdkBase -Force -Recurse |
+          Select-Object FullName
 
-        Get-ChildItem `
-          -Path $jdkBase `
-          -Force `
-          -Recurse |
-          Select-Object FullName, Length |
-          Format-Table -AutoSize
-
-        throw "Could not find a jmods directory inside the downloaded Liberica JDK."
+        throw "Could not find JDK jmods directory."
       }
 
-      $jdkRoot = $jmodsDirectory.Parent.FullName
+      $jdkRoot = $jmods.Parent.FullName
 
-      Write-Host "Detected JDK root:"
+      Write-Host "Detected JDK:"
       Write-Host $jdkRoot
 
-      Write-Host "Detected jmods:"
-      Write-Host $jmodsDirectory.FullName
-
       if (-not (Test-Path (Join-Path $jdkRoot 'bin\java.exe'))) {
-        throw "Detected JDK directory does not contain bin\java.exe: $jdkRoot"
+        throw "java.exe was not found in: $jdkRoot"
       }
 
       if (-not (Test-Path (Join-Path $jdkRoot 'bin\jlink.exe'))) {
-        throw "Detected JDK directory does not contain bin\jlink.exe: $jdkRoot"
+        throw "jlink.exe was not found in: $jdkRoot"
       }
 
+      # The pom.xml expects this exact JDK path for jlink.
       if ($jdkRoot.TrimEnd('\') -ne $expectedJdkRoot.TrimEnd('\')) {
-        Write-Host "Creating compatibility junction for the path expected by pom.xml..."
-
         if (Test-Path $expectedJdkRoot) {
-          Remove-Item `
-            -LiteralPath $expectedJdkRoot `
-            -Recurse `
-            -Force
+          Remove-Item -LiteralPath $expectedJdkRoot -Recurse -Force
         }
 
         New-Item `
@@ -109,7 +95,7 @@ steps:
       }
 
       if (-not (Test-Path (Join-Path $expectedJdkRoot 'jmods'))) {
-        throw "Compatibility JDK path was not created correctly: $expectedJdkRoot"
+        throw "Expected JDK path was not created: $expectedJdkRoot"
       }
 
       "JAVA_HOME=$jdkRoot" |
@@ -118,18 +104,13 @@ steps:
           -Encoding utf8 `
           -Append
 
-      $jdkRootBin = Join-Path $jdkRoot 'bin'
-
-      $jdkRootBin |
+      (Join-Path $jdkRoot 'bin') |
         Out-File `
           -FilePath $env:GITHUB_PATH `
           -Encoding utf8 `
           -Append
 
-      Write-Host "JAVA_HOME set to:"
-      Write-Host $jdkRoot
-
-  - name: Verify build tools
+  - name: Verify Java and Maven
     shell: powershell
     run: |
       $ErrorActionPreference = 'Stop'
@@ -138,7 +119,7 @@ steps:
       jlink --version
       mvn -version
 
-  - name: Prepare private configuration for packaging
+  - name: Prepare private configuration
     shell: powershell
     run: |
       $ErrorActionPreference = 'Stop'
@@ -156,139 +137,97 @@ steps:
           -Encoding utf8
       }
 
-  - name: Apply Kotlin source compatibility fixes
+  - name: Fix Kotlin source compatibility
     shell: powershell
     run: |
       $ErrorActionPreference = 'Stop'
 
-      $failchatMain = 'src/main/kotlin/failchat/FailchatMain.kt'
-      $ttsClient = 'src/main/kotlin/failchat/tts/StreamElementsTtsClient.kt'
+      $mainFile = 'src/main/kotlin/failchat/FailchatMain.kt'
+      $ttsFile = 'src/main/kotlin/failchat/tts/StreamElementsTtsClient.kt'
 
-      if (-not (Test-Path $failchatMain)) {
-        throw "Source file not found: $failchatMain"
+      if (-not (Test-Path $mainFile)) {
+        throw "File not found: $mainFile"
       }
 
-      if (-not (Test-Path $ttsClient)) {
-        throw "Source file not found: $ttsClient"
+      if (-not (Test-Path $ttsFile)) {
+        throw "File not found: $ttsFile"
       }
 
-      Write-Host "Patching $failchatMain..."
+      # Fix missing UiLanguage import.
+      $text = Get-Content -Path $mainFile -Raw
 
-      $mainText = Get-Content `
-        -Path $failchatMain `
-        -Raw
+      if ($text -notmatch '(?m)^import failchat\.gui\.UiLanguage$') {
+        $importMarker = 'import failchat.gui.PortBindAlert'
 
-      if ($mainText -notmatch '(?m)^import failchat\.gui\.UiLanguage\s*$') {
-        $marker = 'import failchat.gui.PortBindAlert'
-
-        if ($mainText -notmatch [regex]::Escape($marker)) {
-          throw "Could not find import insertion point in $failchatMain"
+        if ($text -notmatch [regex]::Escape($importMarker)) {
+          throw "Could not find import location in $mainFile"
         }
 
-        $mainText = $mainText.Replace(
-          $marker,
-          "$marker`r`nimport failchat.gui.UiLanguage"
+        $text = $text.Replace(
+          $importMarker,
+          "$importMarker`r`nimport failchat.gui.UiLanguage"
         )
+
+        Set-Content `
+          -Path $mainFile `
+          -Value $text `
+          -Encoding utf8 `
+          -NoNewline
       }
 
-      Set-Content `
-        -Path $failchatMain `
-        -Value $mainText `
-        -Encoding utf8 `
-        -NoNewline
+      # Fix OkHttp 4 API changes.
+      $text = Get-Content -Path $ttsFile -Raw
 
-      Write-Host "Patching $ttsClient..."
+      if ($text -notmatch '(?m)^import okhttp3\.HttpUrl\.Companion\.toHttpUrlOrNull$') {
+        $marker = 'import okhttp3.HttpUrl'
 
-      $ttsText = Get-Content `
-        -Path $ttsClient `
-        -Raw
-
-      if ($ttsText -match 'import okhttp3\.HttpUrl') {
-        $ttsText = $ttsText.Replace(
-          'import okhttp3.HttpUrl',
-          'import okhttp3.HttpUrl.Companion.toHttpUrlOrNull'
-        )
-      }
-      elseif ($ttsText -notmatch '(?m)^import okhttp3\.HttpUrl\.Companion\.toHttpUrlOrNull\s*$') {
-        $marker = 'import com.fasterxml.jackson.databind.ObjectMapper'
-
-        if ($ttsText -notmatch [regex]::Escape($marker)) {
-          throw "Could not find import insertion point in $ttsClient"
+        if ($text -match [regex]::Escape($marker)) {
+          $text = $text.Replace(
+            $marker,
+            'import okhttp3.HttpUrl.Companion.toHttpUrlOrNull'
+          )
         }
+        else {
+          $marker = 'import com.fasterxml.jackson.databind.ObjectMapper'
 
-        $ttsText = $ttsText.Replace(
-          $marker,
-          "$marker`r`nimport okhttp3.HttpUrl.Companion.toHttpUrlOrNull"
-        )
+          if ($text -notmatch [regex]::Escape($marker)) {
+            throw "Could not find import location in $ttsFile"
+          }
+
+          $text = $text.Replace(
+            $marker,
+            "$marker`r`nimport okhttp3.HttpUrl.Companion.toHttpUrlOrNull"
+          )
+        }
       }
 
-      $ttsText = $ttsText.Replace(
+      $text = $text.Replace(
         'HttpUrl.parse(apiUrl)',
         'apiUrl.toHttpUrlOrNull()'
       )
 
-      $ttsText = $ttsText.Replace(
+      $text = $text.Replace(
         'response.code()',
         'response.code'
       )
 
-      $ttsText = $ttsText.Replace(
+      $text = $text.Replace(
         'response.body()',
         'response.body'
       )
 
       Set-Content `
-        -Path $ttsClient `
-        -Value $ttsText `
+        -Path $ttsFile `
+        -Value $text `
         -Encoding utf8 `
         -NoNewline
 
-      Write-Host ""
-      Write-Host "Compatibility fixes applied successfully."
-
-      Write-Host ""
-      Write-Host "Checking patched source..."
-
-      $mainCheck = Get-Content `
-        -Path $failchatMain `
-        -Raw
-
-      $ttsCheck = Get-Content `
-        -Path $ttsClient `
-        -Raw
-
-      if ($mainCheck -notmatch '(?m)^import failchat\.gui\.UiLanguage\s*$') {
-        throw "UiLanguage import was not applied."
-      }
-
-      if ($ttsCheck -match 'HttpUrl\.parse\(apiUrl\)') {
-        throw "Old HttpUrl.parse(apiUrl) call is still present."
-      }
-
-      if ($ttsCheck -match 'response\.code\(\)') {
-        throw "Old response.code() call is still present."
-      }
-
-      if ($ttsCheck -match 'response\.body\(\)') {
-        throw "Old response.body() call is still present."
-      }
-
-      if ($ttsCheck -notmatch '(?m)^import okhttp3\.HttpUrl\.Companion\.toHttpUrlOrNull\s*$') {
-        throw "toHttpUrlOrNull import is missing."
-      }
-
-      Write-Host "Source compatibility checks passed."
-
-  - name: Build distribution
+  - name: Build
     shell: powershell
     run: |
       $ErrorActionPreference = 'Stop'
 
-      mvn `
-        --batch-mode `
-        --no-transfer-progress `
-        package `
-        -DskipTests
+      mvn --batch-mode --no-transfer-progress package -DskipTests
 
   - name: Verify package
     shell: powershell
@@ -303,14 +242,14 @@ steps:
       )
 
       if ($packages.Count -ne 1) {
-        throw "Expected exactly one failchat distribution ZIP, found $($packages.Count)"
+        throw "Expected exactly one failchat ZIP, found $($packages.Count)"
       }
 
-      Write-Host "Built package: $($packages[0].FullName)"
-      Write-Host "Size: $($packages[0].Length) bytes"
+      Write-Host "Package:"
+      Write-Host $packages[0].FullName
 
-  - name: Upload distribution
-    uses: actions/upload-artifact@v7
+  - name: Upload artifact
+    uses: actions/upload-artifact@v4
     with:
       name: failchat-windows-x64
       path: target/failchat-v*.zip
