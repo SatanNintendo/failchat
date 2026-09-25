@@ -210,6 +210,12 @@ class AppStateManager(private val deps: Dependencies) {
         }
 
         try {
+            deps.obsWebSocketService.stop()
+        } catch (t: Throwable) {
+            logger.error("Failed to stop OBS integration during a shutdown", t)
+        }
+
+        try {
             deps.chatHistoryWriter.close()
         } catch (t: Throwable) {
             logger.error("Failed to close chat history writer", t)

@@ -70,6 +70,7 @@ import failchat.twitch.TwitchEmoticonLoadConfiguration
 import failchat.twitch.TwitchGlobalEmoticonLoader
 import failchat.twitch.TwitchViewersCountLoader
 import failchat.tts.StreamElementsTtsClient
+import failchat.obs.ObsWebSocketService
 import failchat.tts.TtsService
 import failchat.util.objectMapper
 import failchat.viewers.ViewersCountLoader
@@ -129,6 +130,13 @@ class Dependencies {
         configuration,
         StreamElementsTtsClient(okHttpClient, objectMapper),
         guiAvailable = { configuration.getString("gui-mode") != GuiMode.NO_GUI.name }
+    )
+
+    // OBS integration uses the existing Java-WebSocket and Jackson dependencies.
+    val obsWebSocketService = ObsWebSocketService(
+        configuration,
+        objectMapper,
+        backgroundExecutorService
     )
 
 

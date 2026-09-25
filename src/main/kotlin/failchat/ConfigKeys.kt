@@ -51,6 +51,14 @@ object ConfigKeys {
     const val showClickTransparencyIcon = "show-click-transparency-icon"
     const val saveMessageHistory = "save-message-history"
 
+    object Obs {
+        const val enabled = "obs.enabled"
+        const val host = "obs.host"
+        const val port = "obs.port"
+        const val password = "obs.password"
+        const val autoRefresh = "obs.auto-refresh"
+    }
+
     object Tts {
         const val enabled = "tts.enabled"
         const val voice = "tts.voice"

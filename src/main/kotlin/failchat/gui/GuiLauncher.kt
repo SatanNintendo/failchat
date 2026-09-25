@@ -38,7 +38,8 @@ class GuiLauncher : Application() {
                 failchatEmoticonsDirectory,
                 isWindows,
                 lazy { deps.get()!!.guiEventHandler },
-                lazy { deps.get()!!.globalEmoticonUpdater }
+                lazy { deps.get()!!.globalEmoticonUpdater },
+                deps.get()!!.obsWebSocketService
         )
 
         settings.show()

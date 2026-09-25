@@ -319,6 +319,113 @@
                                                         <HBox alignment="CENTER">
                                                             <children>
                                                                 <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                                      text="OBS Studio integration">
+                                                                    <font>
+                                                                        <Font name="System Bold" size="12.0"/>
+                                                                    </font>
+                                                                </Text>
+                                                            </children>
+                                                            <VBox.margin>
+                                                                <Insets top="6.0"/>
+                                                            </VBox.margin>
+                                                        </HBox>
+                                                        <CheckBox fx:id="obs_enabled" mnemonicParsing="false"
+                                                                  text="Enable automatic OBS integration">
+                                                            <font>
+                                                                <Font size="12.0"/>
+                                                            </font>
+                                                            <VBox.margin>
+                                                                <Insets bottom="6.0" top="6.0"/>
+                                                            </VBox.margin>
+                                                        </CheckBox>
+                                                        <HBox alignment="CENTER_LEFT">
+                                                            <children>
+                                                                <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                                      text="OBS WebSocket host:">
+                                                                    <font>
+                                                                        <Font size="12.0"/>
+                                                                    </font>
+                                                                    <HBox.margin>
+                                                                        <Insets right="8.0"/>
+                                                                    </HBox.margin>
+                                                                </Text>
+                                                                <TextField fx:id="obs_host" prefWidth="145.0"
+                                                                           promptText="127.0.0.1"/>
+                                                                <Text strokeType="OUTSIDE" strokeWidth="0.0" text=":"/>
+                                                                <TextField fx:id="obs_port" prefWidth="58.0"
+                                                                           promptText="4455">
+                                                                    <HBox.margin>
+                                                                        <Insets left="4.0"/>
+                                                                    </HBox.margin>
+                                                                </TextField>
+                                                            </children>
+                                                            <VBox.margin>
+                                                                <Insets bottom="4.0"/>
+                                                            </VBox.margin>
+                                                        </HBox>
+                                                        <HBox alignment="CENTER_LEFT">
+                                                            <children>
+                                                                <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                                      text="OBS WebSocket password:">
+                                                                    <font>
+                                                                        <Font size="12.0"/>
+                                                                    </font>
+                                                                    <HBox.margin>
+                                                                        <Insets right="8.0"/>
+                                                                    </HBox.margin>
+                                                                </Text>
+                                                                <PasswordField fx:id="obs_password" prefWidth="220.0"
+                                                                               promptText="Password (leave empty if disabled)"/>
+                                                            </children>
+                                                            <VBox.margin>
+                                                                <Insets bottom="4.0"/>
+                                                            </VBox.margin>
+                                                        </HBox>
+                                                        <CheckBox fx:id="obs_auto_refresh" mnemonicParsing="false"
+                                                                  text="Automatically refresh matching failchat Browser Sources">
+                                                            <font>
+                                                                <Font size="12.0"/>
+                                                            </font>
+                                                            <VBox.margin>
+                                                                <Insets bottom="6.0" top="4.0"/>
+                                                            </VBox.margin>
+                                                        </CheckBox>
+                                                        <HBox alignment="CENTER_LEFT">
+                                                            <children>
+                                                                <Button fx:id="obs_refresh_button" mnemonicParsing="false"
+                                                                        text="Refresh OBS Browser Sources"/>
+                                                                <Text fx:id="obs_status_text" strokeType="OUTSIDE"
+                                                                      strokeWidth="0.0" text="Not connected" wrappingWidth="210.0">
+                                                                    <font>
+                                                                        <Font size="11.0"/>
+                                                                    </font>
+                                                                    <HBox.margin>
+                                                                        <Insets left="8.0"/>
+                                                                    </HBox.margin>
+                                                                </Text>
+                                                            </children>
+                                                            <VBox.margin>
+                                                                <Insets bottom="8.0" top="2.0"/>
+                                                            </VBox.margin>
+                                                        </HBox>
+                                                        <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                              text="The integration uses OBS WebSocket 5.x and refreshes only Browser Sources whose URL points to this failchat instance. The manual button works even when automatic integration is disabled."
+                                                              wrappingWidth="385.0">
+                                                            <font>
+                                                                <Font size="11.0"/>
+                                                            </font>
+                                                            <VBox.margin>
+                                                                <Insets bottom="8.0" left="20.0" right="20.0"/>
+                                                            </VBox.margin>
+                                                        </Text>
+                                                        <Separator prefWidth="385.0">
+                                                            <VBox.margin>
+                                                                <Insets bottom="4.0"/>
+                                                            </VBox.margin>
+                                                        </Separator>
+                                                        <HBox alignment="CENTER">
+                                                            <children>
+                                                                <Text strokeType="OUTSIDE" strokeWidth="0.0"
                                                                       text="Common settings">
                                                                     <font>
                                                                         <Font name="System Bold" size="12.0"/>

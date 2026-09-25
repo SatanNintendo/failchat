@@ -88,6 +88,10 @@ fun main0(args: Array<String>) {
     httpServer.start()
     logger.info("Http/websocket server started at {}:{}", FailchatServerInfo.host.hostAddress, FailchatServerInfo.port)
 
+    // Start optional OBS integration only after the local HTTP server is ready.
+    // This is important when OBS was launched before failchat.
+    deps.obsWebSocketService.start()
+
     // If emoticon db file not exists, reset 'last-updated' config values
     val dbFileExists = Files.exists(emoticonDbFile)
     if (!dbFileExists) {

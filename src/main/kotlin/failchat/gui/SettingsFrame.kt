@@ -2,9 +2,11 @@ package failchat.gui
 
 import failchat.ConfigKeys
 import failchat.emoticon.GlobalEmoticonUpdater
+import failchat.obs.ObsWebSocketService
 import failchat.skin.Skin
 import failchat.util.toHexFormat
 import javafx.application.Application
+import javafx.application.Platform
 import javafx.collections.FXCollections
 import javafx.fxml.FXMLLoader
 import javafx.scene.Scene
@@ -40,7 +42,8 @@ class SettingsFrame(
     private val failchatEmoticonsDirectory: Path,
     private val clickTransparencyEnabled: Boolean,
     private val guiEventHandler: Lazy<GuiEventHandler>,
-    private val emoticonUpdater: Lazy<GlobalEmoticonUpdater>
+    private val emoticonUpdater: Lazy<GlobalEmoticonUpdater>,
+    private val obsWebSocketService: ObsWebSocketService
 ) {
 
     private companion object {
@@ -112,6 +115,15 @@ class SettingsFrame(
     private val ttsVolume = namespace["tts_volume"] as Slider
     private val ttsVolumeText = namespace["tts_volume_text"] as Text
 
+    // OBS Studio integration
+    private val obsEnabled = namespace["obs_enabled"] as CheckBox
+    private val obsHost = namespace["obs_host"] as TextField
+    private val obsPort = namespace["obs_port"] as TextField
+    private val obsPassword = namespace["obs_password"] as PasswordField
+    private val obsAutoRefresh = namespace["obs_auto_refresh"] as CheckBox
+    private val obsRefreshButton = namespace["obs_refresh_button"] as Button
+    private val obsStatusText = namespace["obs_status_text"] as Text
+
     // common settings
     private val opacitySlider = namespace["opacity"] as Slider
     private val showOriginBadges = namespace["show_origin_badges"] as CheckBox
@@ -154,6 +166,7 @@ class SettingsFrame(
 
     private var emoticonsLoading = false
     private var resetConfigurationRequested = false
+    private var updatingSettingsValues = false
 
 
     init {
@@ -193,6 +206,34 @@ class SettingsFrame(
         }
         ttsVolume.valueProperty().addListener { _, _, newValue ->
             ttsVolumeText.text = "${newValue.toInt()}%"
+        }
+
+        obsEnabled.selectedProperty().addListener { _, _, newValue ->
+            obsAutoRefresh.isDisable = !newValue
+            if (!updatingSettingsValues) {
+                saveObsSettingsToConfiguration()
+                obsWebSocketService.applyConfiguration()
+            }
+        }
+        obsRefreshButton.setOnAction {
+            saveObsSettingsToConfiguration()
+            obsStatusText.text = UiLanguage.text("obs.status.searching")
+            obsWebSocketService.refreshNow { result ->
+                Platform.runLater {
+                    obsStatusText.text = when {
+                        result.refreshedSources > 0 -> UiLanguage.text("obs.status.refreshed")
+                            .replace("{0}", result.refreshedSources.toString())
+                        result.error != null -> UiLanguage.text("obs.status.error")
+                            .replace("{0}", result.error)
+                        else -> UiLanguage.text("obs.status.not-found")
+                    }
+                }
+            }
+        }
+        obsWebSocketService.addStatusListener { status ->
+            Platform.runLater {
+                updateObsStatusText(status)
+            }
         }
 
         clickTransparency.isDisable = !clickTransparencyEnabled
@@ -287,6 +328,15 @@ class SettingsFrame(
     }
 
     fun updateSettingsValues() {
+        updatingSettingsValues = true
+        try {
+            updateSettingsValuesInternal()
+        } finally {
+            updatingSettingsValues = false
+        }
+    }
+
+    private fun updateSettingsValuesInternal() {
         languageSelector.value = UiLanguage.optionFor(config.getString(ConfigKeys.language, UiLanguage.ENGLISH))
         goodgameChannel.text = config.getString(ConfigKeys.Goodgame.channel)
         twitchChannel.text = config.getString(ConfigKeys.Twitch.channel)
@@ -353,12 +403,22 @@ class SettingsFrame(
         ttsKey.isDisable = !ttsEnabled.isSelected
         ttsVolume.isDisable = !ttsEnabled.isSelected
 
+        obsEnabled.isSelected = config.getBoolean(ConfigKeys.Obs.enabled, false)
+        obsHost.text = config.getString(ConfigKeys.Obs.host, "127.0.0.1")
+        obsPort.text = config.getInt(ConfigKeys.Obs.port, 4455).toString()
+        obsPassword.text = config.getString(ConfigKeys.Obs.password, "")
+        obsAutoRefresh.isSelected = config.getBoolean(ConfigKeys.Obs.autoRefresh, true)
+        obsAutoRefresh.isDisable = !obsEnabled.isSelected
+
         val userIds = config.getStringArray(ConfigKeys.ignore)
         ignoreList.text = if (userIds.isEmpty()) {
             ""
         } else {
             userIds.joinToString(separator = "\n", postfix = "\n")
         }
+
+        saveObsSettingsToConfiguration()
+        obsWebSocketService.applyConfiguration()
     }
 
     private fun saveSettingsValues() {
@@ -413,15 +473,17 @@ class SettingsFrame(
         config.setProperty(ConfigKeys.Tts.voice, configuredTtsVoice.ifEmpty { "Alena" })
         config.setProperty(ConfigKeys.Tts.key, ttsKey.text.trim())
         config.setProperty(ConfigKeys.Tts.volume, (ttsVolume.value / 100.0).coerceIn(0.0, 1.0))
+        saveObsSettingsToConfiguration()
         config.setProperty(ConfigKeys.language, languageSelector.value?.code ?: UiLanguage.ENGLISH)
 
         config.setProperty(ConfigKeys.ignore, ignoreList.text.split("\n").dropLastWhile { it.isEmpty() }.toTypedArray())
+        obsWebSocketService.applyConfiguration()
     }
 
     private fun applyLocalization() {
         UiLanguage.localize(
             scene.root as Parent,
-            setOf(ttsVolumeText, opacityText, reloadEmoticonsButton, resetConfigurationButton)
+            setOf(ttsVolumeText, opacityText, obsStatusText, reloadEmoticonsButton, resetConfigurationButton)
         )
         updateDynamicLocalization()
     }
@@ -439,6 +501,40 @@ class SettingsFrame(
         }
         ttsVolumeText.text = "${ttsVolume.value.toInt()}%"
         opacityText.text = Integer.toString(opacitySlider.value.toInt())
+        updateObsStatusText(obsWebSocketService.currentStatus())
+    }
+
+    private fun saveObsSettingsToConfiguration() {
+        config.setProperty(ConfigKeys.Obs.enabled, obsEnabled.isSelected)
+        config.setProperty(
+            ConfigKeys.Obs.host,
+            obsHost.text.trim().ifEmpty { "127.0.0.1" }
+        )
+        config.setProperty(ConfigKeys.Obs.port, parseObsPort(obsPort.text))
+        config.setProperty(ConfigKeys.Obs.password, obsPassword.text)
+        config.setProperty(ConfigKeys.Obs.autoRefresh, obsAutoRefresh.isSelected)
+    }
+
+    private fun parseObsPort(value: String): Int {
+        val port = value.trim().toIntOrNull()
+        if (port == null || port !in 1..65535) {
+            logger.warn("Invalid OBS WebSocket port '{}'; using default 4455", value)
+            return 4455
+        }
+        return port
+    }
+
+    private fun updateObsStatusText(status: ObsWebSocketService.Status) {
+        obsStatusText.text = when (status) {
+            ObsWebSocketService.Status.DISABLED -> UiLanguage.text("obs.status.disabled")
+            ObsWebSocketService.Status.CONNECTING -> UiLanguage.text("obs.status.connecting")
+            ObsWebSocketService.Status.CONNECTED -> UiLanguage.text("obs.status.connected")
+            ObsWebSocketService.Status.SEARCHING -> UiLanguage.text("obs.status.searching")
+            ObsWebSocketService.Status.REFRESHED -> UiLanguage.text("obs.status.refreshed-generic")
+            ObsWebSocketService.Status.NOT_FOUND -> UiLanguage.text("obs.status.not-found")
+            ObsWebSocketService.Status.ERROR -> UiLanguage.text("obs.status.error-generic")
+            ObsWebSocketService.Status.DISCONNECTED -> UiLanguage.text("obs.status.disconnected")
+        }
     }
 
     private fun parseZoomPercent(zoomPercent: String): Int {
