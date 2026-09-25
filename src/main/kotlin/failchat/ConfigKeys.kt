@@ -50,6 +50,15 @@ object ConfigKeys {
     const val showClickTransparencyIcon = "show-click-transparency-icon"
     const val saveMessageHistory = "save-message-history"
 
+    object Tts {
+        const val enabled = "tts.enabled"
+        const val voice = "tts.voice"
+        const val key = "tts.key"
+        const val apiUrl = "tts.api-url"
+        const val maxCharacters = "tts.max-characters"
+        const val queueCapacity = "tts.queue-capacity"
+    }
+
     const val opacity = "opacity"
     const val showOriginBadges = "show-origin-badges"
     const val showUserBadges = "show-user-badges"

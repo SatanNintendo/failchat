@@ -69,6 +69,8 @@ import failchat.twitch.TwitchEmoticonHandler
 import failchat.twitch.TwitchEmoticonLoadConfiguration
 import failchat.twitch.TwitchGlobalEmoticonLoader
 import failchat.twitch.TwitchViewersCountLoader
+import failchat.tts.StreamElementsTtsClient
+import failchat.tts.TtsService
 import failchat.util.objectMapper
 import failchat.viewers.ViewersCountLoader
 import failchat.viewers.ViewersCountWsHandler
@@ -121,6 +123,13 @@ class Dependencies {
     val configLoader = ConfigLoader(failchatHomePath)
     val configuration = configLoader.load()
     val appConfiguration = AppConfiguration(configuration)
+
+    // TTS is isolated from the shared HTTP client and chat pipeline.
+    val ttsService = TtsService(
+        configuration,
+        StreamElementsTtsClient(okHttpClient, objectMapper),
+        guiAvailable = { configuration.getString("gui-mode") != GuiMode.NO_GUI.name }
+    )
 
 
     // Core dependencies
@@ -210,7 +219,8 @@ class Dependencies {
             listOf<MessageFilter<ChatMessage>>(ignoreFilter),
             handlers,
             chatMessageHistory,
-            chatMessageSender
+            chatMessageSender,
+            ttsService
         )
     }
     val onStatusUpdateCallback = OnStatusUpdateCallback(originStatusManager)

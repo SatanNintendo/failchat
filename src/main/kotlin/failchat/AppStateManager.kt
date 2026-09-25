@@ -50,6 +50,7 @@ class AppStateManager(private val deps: Dependencies) {
     private val originStatusManager = deps.originStatusManager
     private val deletedMessagePlaceholderFactory = deps.deletedMessagePlaceholderFactory
     private val messageSender = deps.chatMessageSender
+    private val ttsService = deps.ttsService
 
     private val lock: Lock = ReentrantLock()
     private val appConfig: AppConfiguration = deps.appConfiguration
@@ -203,6 +204,12 @@ class AppStateManager(private val deps: Dependencies) {
         }
 
         try {
+            ttsService.stop()
+        } catch (t: Throwable) {
+            logger.error("Failed to stop TTS service during a shutdown", t)
+        }
+
+        try {
             deps.chatHistoryWriter.close()
         } catch (t: Throwable) {
             logger.error("Failed to close chat history writer", t)
@@ -216,6 +223,7 @@ class AppStateManager(private val deps: Dependencies) {
     }
 
     private fun reset() {
+        ttsService.clearQueueAndStop()
         viewersCountWsHandler.viewersCounter = null
         originStatusManager.reset()
 

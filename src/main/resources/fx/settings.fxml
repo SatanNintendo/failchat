@@ -5,7 +5,9 @@
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ChoiceBox?>
 <?import javafx.scene.control.ColorPicker?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Hyperlink?>
+<?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.ProgressIndicator?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.Separator?>
@@ -210,6 +212,79 @@
                                             <children>
                                                 <VBox alignment="TOP_CENTER" prefWidth="435.0">
                                                     <children>
+                                                        <HBox alignment="CENTER">
+                                                            <children>
+                                                                <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                                      text="Text-to-speech">
+                                                                    <font>
+                                                                        <Font name="System Bold" size="12.0"/>
+                                                                    </font>
+                                                                </Text>
+                                                            </children>
+                                                            <VBox.margin>
+                                                                <Insets top="6.0"/>
+                                                            </VBox.margin>
+                                                        </HBox>
+                                                        <CheckBox fx:id="tts_enabled" mnemonicParsing="false"
+                                                                  text="Enable chat text-to-speech">
+                                                            <font>
+                                                                <Font size="12.0"/>
+                                                            </font>
+                                                            <VBox.margin>
+                                                                <Insets bottom="6.0" top="6.0"/>
+                                                            </VBox.margin>
+                                                        </CheckBox>
+                                                        <HBox alignment="CENTER_LEFT">
+                                                            <children>
+                                                                <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                                      text="Voice:">
+                                                                    <font>
+                                                                        <Font size="12.0"/>
+                                                                    </font>
+                                                                    <HBox.margin>
+                                                                        <Insets right="8.0"/>
+                                                                    </HBox.margin>
+                                                                </Text>
+                                                                <ComboBox fx:id="tts_voice" editable="true" prefWidth="220.0"
+                                                                          promptText="StreamElements voice ID"/>
+                                                            </children>
+                                                            <VBox.margin>
+                                                                <Insets bottom="4.0"/>
+                                                            </VBox.margin>
+                                                        </HBox>
+                                                        <HBox alignment="CENTER_LEFT">
+                                                            <children>
+                                                                <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                                      text="Key:">
+                                                                    <font>
+                                                                        <Font size="12.0"/>
+                                                                    </font>
+                                                                    <HBox.margin>
+                                                                        <Insets right="8.0"/>
+                                                                    </HBox.margin>
+                                                                </Text>
+                                                                <PasswordField fx:id="tts_key" prefWidth="220.0"
+                                                                               promptText="StreamElements API key"/>
+                                                            </children>
+                                                            <VBox.margin>
+                                                                <Insets bottom="4.0"/>
+                                                            </VBox.margin>
+                                                        </HBox>
+                                                        <Text strokeType="OUTSIDE" strokeWidth="0.0"
+                                                              text="The current StreamElements speech endpoint requires an auth key. Paste either the authToken or your full JWT; JWTs are parsed locally. The key is stored in user.properties, so do not share that file. The voice field accepts any provider voice ID."
+                                                              wrappingWidth="385.0">
+                                                            <font>
+                                                                <Font size="11.0"/>
+                                                            </font>
+                                                            <VBox.margin>
+                                                                <Insets bottom="8.0" left="20.0" right="20.0"/>
+                                                            </VBox.margin>
+                                                        </Text>
+                                                        <Separator prefWidth="385.0">
+                                                            <VBox.margin>
+                                                                <Insets bottom="4.0"/>
+                                                            </VBox.margin>
+                                                        </Separator>
                                                         <HBox alignment="CENTER">
                                                             <children>
                                                                 <Text strokeType="OUTSIDE" strokeWidth="0.0"

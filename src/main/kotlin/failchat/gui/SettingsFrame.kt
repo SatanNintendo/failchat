@@ -17,7 +17,9 @@ import javafx.scene.control.ButtonType
 import javafx.scene.control.CheckBox
 import javafx.scene.control.ChoiceBox
 import javafx.scene.control.ColorPicker
+import javafx.scene.control.ComboBox
 import javafx.scene.control.Hyperlink
+import javafx.scene.control.PasswordField
 import javafx.scene.control.ProgressIndicator
 import javafx.scene.control.Slider
 import javafx.scene.control.TextArea
@@ -42,6 +44,41 @@ class SettingsFrame(
 
     private companion object {
         val logger = KotlinLogging.logger {}
+
+        /**
+         * Common StreamElements voice IDs. The ComboBox remains editable so users can enter
+         * a provider voice that is not listed here.
+         */
+        val STREAM_ELEMENTS_VOICES = listOf(
+            "Alena",
+            "Tatyana",
+            "Maxim",
+            "Alice",
+            "Ilya",
+            "Masha",
+            "Petr",
+            "Brian",
+            "Amy",
+            "Emma",
+            "Matthew",
+            "Joey",
+            "Justin",
+            "Ivy",
+            "Salli",
+            "Joanna",
+            "Kendra",
+            "Nicole",
+            "Raveena",
+            "Russell",
+            "Geraint",
+            "Arthur",
+            "Celine",
+            "Mathieu",
+            "Mizuki",
+            "Camilla",
+            "Ricardo",
+            "Vitoria"
+        )
     }
 
     private val loader = FXMLLoader(javaClass.getResource("/fx/settings.fxml"))
@@ -67,6 +104,11 @@ class SettingsFrame(
     private val showImages = namespace["show_images"] as CheckBox
 
     // Additional settings tab
+    private val ttsEnabled = namespace["tts_enabled"] as CheckBox
+    @Suppress("UNCHECKED_CAST")
+    private val ttsVoice = namespace["tts_voice"] as ComboBox<String>
+    private val ttsKey = namespace["tts_key"] as PasswordField
+
     // common settings
     private val opacitySlider = namespace["opacity"] as Slider
     private val showOriginBadges = namespace["show_origin_badges"] as CheckBox
@@ -122,6 +164,13 @@ class SettingsFrame(
 
         skin.converter = SkinConverter(skinList)
         skin.items = FXCollections.observableArrayList(skinList)
+
+        ttsVoice.items.setAll(STREAM_ELEMENTS_VOICES)
+        ttsVoice.isEditable = true
+        ttsEnabled.selectedProperty().addListener { _, _, newValue ->
+            ttsVoice.isDisable = !newValue
+            ttsKey.isDisable = !newValue
+        }
 
         clickTransparency.isDisable = !clickTransparencyEnabled
         showClickTransparencyIcon.isDisable = !clickTransparencyEnabled
@@ -261,6 +310,14 @@ class SettingsFrame(
 
         opacitySlider.value = config.getDouble(ConfigKeys.opacity)
 
+        ttsEnabled.isSelected = config.getBoolean(ConfigKeys.Tts.enabled)
+        val configuredTtsVoice = config.getString(ConfigKeys.Tts.voice, "Alena")
+        ttsVoice.value = configuredTtsVoice
+        ttsVoice.editor.text = configuredTtsVoice
+        ttsKey.text = config.getString(ConfigKeys.Tts.key, "")
+        ttsVoice.isDisable = !ttsEnabled.isSelected
+        ttsKey.isDisable = !ttsEnabled.isSelected
+
         val userIds = config.getStringArray(ConfigKeys.ignore)
         ignoreList.text = if (userIds.isEmpty()) {
             ""
@@ -315,6 +372,11 @@ class SettingsFrame(
             parseHideMessagesAfter(hideMessagesExternalAfter.text)
         )
         config.setProperty(ConfigKeys.ExternalClient.showStatusMessages, showStatusMessagesExternal.isSelected)
+
+        val configuredTtsVoice = ttsVoice.editor.text.trim()
+        config.setProperty(ConfigKeys.Tts.enabled, ttsEnabled.isSelected)
+        config.setProperty(ConfigKeys.Tts.voice, configuredTtsVoice.ifEmpty { "Alena" })
+        config.setProperty(ConfigKeys.Tts.key, ttsKey.text.trim())
 
         config.setProperty(ConfigKeys.ignore, ignoreList.text.split("\n").dropLastWhile { it.isEmpty() }.toTypedArray())
     }

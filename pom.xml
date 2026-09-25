@@ -508,7 +508,7 @@
                                 <argument>--add-modules</argument>
                                 <!-- TODO dynamically generate the list of modules -->
                                 <argument>
-                                    java.compiler,java.datatransfer,java.desktop,java.instrument,java.logging,java.management,java.naming,java.sql,java.xml,javafx.base,javafx.controls,javafx.fxml,javafx.graphics,javafx.web,jdk.attach,jdk.jdi,jdk.jsobject,jdk.unsupported,jdk.crypto.ec
+                                    java.compiler,java.datatransfer,java.desktop,java.instrument,java.logging,java.management,java.naming,java.sql,java.xml,javafx.base,javafx.controls,javafx.fxml,javafx.graphics,javafx.media,javafx.web,jdk.attach,jdk.jdi,jdk.jsobject,jdk.unsupported,jdk.crypto.ec
                                 </argument>
                                 <!-- use specific jdk to build an app runtime. this is required to compile across different OS -->
                                 <!-- comment the next 2 lines to build with a jdk in PATH-->
