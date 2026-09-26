@@ -32,6 +32,9 @@
         <commons-cli.version>1.4</commons-cli.version>
         <ktor.version>1.6.3</ktor.version>
         <mapdb.version>3.0.7</mapdb.version>
+        <!-- MapDB 3.0.7 declares an open-ended Eclipse Collections range.
+             Pin it to the Java-11-compatible version used by the original stack. -->
+        <eclipse-collections.version>9.2.0</eclipse-collections.version>
         <jna.version>5.2.0</jna.version>
         <javassist.version>3.23.1-GA</javassist.version>
         <emoji-java.version>5.1.1</emoji-java.version>
@@ -183,6 +186,25 @@
                     <artifactId>kotlin-stdlib</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- MapDB 3.0.7 allows newer Eclipse Collections versions through a broad
+             Maven version range. New releases may require a newer Java runtime,
+             so keep the whole EC family pinned for the Java 11 runtime. -->
+        <dependency>
+            <groupId>org.eclipse.collections</groupId>
+            <artifactId>eclipse-collections-api</artifactId>
+            <version>${eclipse-collections.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.collections</groupId>
+            <artifactId>eclipse-collections</artifactId>
+            <version>${eclipse-collections.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.collections</groupId>
+            <artifactId>eclipse-collections-forkjoin</artifactId>
+            <version>${eclipse-collections.version}</version>
         </dependency>
 
         <!-- Logging -->
