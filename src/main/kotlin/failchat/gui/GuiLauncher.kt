@@ -25,11 +25,12 @@ class GuiLauncher : Application() {
     }
 
     override fun start(primaryStage: Stage) {
+        UiTheme.install()
+
         val startTime = Instant.now()
 
         val config = deps.get()!!.configuration
         val isWindows = com.sun.jna.Platform.isWindows()
-
         val settings = SettingsFrame(
                 this,
                 primaryStage,
@@ -43,7 +44,6 @@ class GuiLauncher : Application() {
         )
 
         settings.show()
-
         val showTime = Instant.now()
         logger.debug { "Settings frame showed in ${Duration.between(startTime, showTime).toMillis()} ms" }
 
@@ -53,7 +53,6 @@ class GuiLauncher : Application() {
         } else {
             null
         }
-
         Platform.runLater {
             val chat = ChatFrame(
                     this,
@@ -62,7 +61,6 @@ class GuiLauncher : Application() {
                     lazy { deps.get()!!.guiEventHandler },
                     ctConfigurator
             )
-
             val backgroundExecutor = deps.get()!!.backgroundExecutorService
             backgroundExecutor.executeWithCatch {
                 val eventHandler = deps.get()!!.guiEventHandler
@@ -76,11 +74,9 @@ class GuiLauncher : Application() {
 
             showUpdateNotificationOnNewRelease()
         }
-
         logger.info("GUI loaded")
 
     }
-
     private fun showUpdateNotificationOnNewRelease() {
         deps.get()!!.releaseChecker.checkNewRelease { release ->
             Platform.runLater {
@@ -92,13 +88,12 @@ class GuiLauncher : Application() {
                 }
                 val stage = notification.dialogPane.scene.window as Stage
                 stage.icons.setAll(Images.appIcon)
-
+                UiTheme.apply(notification.dialogPane.scene)
                 val changelogButton = ButtonType(UiLanguage.text("dialog.update.download"), OK_DONE)
                 val closeButton = ButtonType(UiLanguage.text("dialog.close"), ButtonData.CANCEL_CLOSE)
                 notification.buttonTypes.setAll(changelogButton, closeButton)
 
                 val result = notification.showAndWait().get()
-
                 if (result === changelogButton) {
                     hostServices.showDocument(release.releasePageUrl)
                 }

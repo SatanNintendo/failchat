@@ -13,9 +13,10 @@ class ChatFrameLauncher : Application() {
     }
 
     override fun start(primaryStage: Stage) {
+        UiTheme.install()
+
         //todo remove copypaste
         val config = deps.get()!!.configuration
-
         val isWindows = com.sun.jna.Platform.isWindows()
         val ctConfigurator: ClickTransparencyConfigurator? = if (isWindows) {
             WindowsCtConfigurator(config)
@@ -33,7 +34,6 @@ class ChatFrameLauncher : Application() {
 
         // init web engine (fixes flickering)
         chat.clearWebContent()
-
         chat.show()
     }
 
