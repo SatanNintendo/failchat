@@ -13,10 +13,12 @@ class ChatFrameLauncher : Application() {
     }
 
     override fun start(primaryStage: Stage) {
+        val config = deps.get()!!.configuration
+        UiLanguage.installGlobalLocalization()
+        UiTheme.initialize(config) { deps.get()!!.guiEventHandler.handleConfigurationChange() }
         UiTheme.install()
 
         //todo remove copypaste
-        val config = deps.get()!!.configuration
         val isWindows = com.sun.jna.Platform.isWindows()
         val ctConfigurator: ClickTransparencyConfigurator? = if (isWindows) {
             WindowsCtConfigurator(config)

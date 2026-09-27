@@ -25,11 +25,13 @@ class GuiLauncher : Application() {
     }
 
     override fun start(primaryStage: Stage) {
+        val config = deps.get()!!.configuration
+        UiLanguage.installGlobalLocalization()
+        UiTheme.initialize(config) { deps.get()!!.guiEventHandler.handleConfigurationChange() }
         UiTheme.install()
 
         val startTime = Instant.now()
 
-        val config = deps.get()!!.configuration
         val isWindows = com.sun.jna.Platform.isWindows()
         val settings = SettingsFrame(
                 this,

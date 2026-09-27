@@ -2,15 +2,8 @@ package failchat.gui
 
 import failchat.ConfigKeys
 import failchat.failchatHomePath
-import org.apache.commons.configuration2.Configuration
-import java.util.Collections
-import java.util.Enumeration
-import java.util.IdentityHashMap
-import java.util.Locale
-import java.util.Properties
-import java.util.ResourceBundle
-import java.util.concurrent.CopyOnWriteArrayList
-import java.nio.file.Files
+import javafx.application.Platform
+import javafx.collections.ListChangeListener
 import javafx.scene.Node
 import javafx.scene.Parent
 import javafx.scene.control.Labeled
@@ -19,6 +12,16 @@ import javafx.scene.control.Tab
 import javafx.scene.control.TabPane
 import javafx.scene.control.TextInputControl
 import javafx.scene.text.Text
+import javafx.stage.Window
+import org.apache.commons.configuration2.Configuration
+import java.nio.file.Files
+import java.util.Collections
+import java.util.Enumeration
+import java.util.IdentityHashMap
+import java.util.Locale
+import java.util.Properties
+import java.util.ResourceBundle
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Application UI localization.
@@ -42,6 +45,7 @@ object UiLanguage {
 
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
     private val originalTexts = Collections.synchronizedMap(IdentityHashMap<Any, String>())
+    private var globalWindowListenerInstalled = false
 
     @Volatile
     private var currentCodeValue = ENGLISH
@@ -58,11 +62,31 @@ object UiLanguage {
         setLanguage(config, configuredCode, notifyListeners = false)
     }
 
+    /**
+     * Keeps newly-created windows localized and also lets open auxiliary windows
+     * participate in live language changes.
+     */
+    fun installGlobalLocalization() {
+        if (globalWindowListenerInstalled) return
+        globalWindowListenerInstalled = true
+
+        Window.getWindows().addListener(ListChangeListener { change ->
+            while (change.next()) {
+                change.addedSubList.forEach { window ->
+                    Platform.runLater {
+                        localizeWindow(window)
+                    }
+                }
+            }
+        })
+
+        Window.getWindows().forEach(::localizeWindow)
+    }
+
     /** Best-effort initialization for startup error dialogs shown before Dependencies exist. */
     fun initializeFromUserConfiguration() {
         val userConfigPath = failchatHomePath.resolve("user.properties")
         if (!Files.isRegularFile(userConfigPath)) return
-
         try {
             Files.newInputStream(userConfigPath).use { input ->
                 val properties = Properties()
@@ -101,6 +125,13 @@ object UiLanguage {
                     // A localization listener must never break the configuration change.
                 }
             }
+
+            // Some auxiliary dialogs do not own a dedicated localization listener.
+            // Relocalize all currently open native windows after their listeners ran so
+            // dynamic controls have already refreshed their current values.
+            Platform.runLater {
+                Window.getWindows().forEach(::localizeWindow)
+            }
         }
     }
 
@@ -126,6 +157,11 @@ object UiLanguage {
      */
     fun localize(root: Parent, ignored: Set<Any> = emptySet()) {
         visit(root, ignored)
+    }
+
+    private fun localizeWindow(window: Window) {
+        val root = window.scene?.root as? Parent ?: return
+        localize(root)
     }
 
     private fun visit(node: Node, ignored: Set<Any>) {
@@ -177,7 +213,6 @@ object UiLanguage {
 
         val trimmed = value.trim()
         if (trimmed.isEmpty()) return value
-
         val translated = try {
             currentBundle.getString("literal.${literalKey(trimmed)}")
         } catch (_: Exception) {

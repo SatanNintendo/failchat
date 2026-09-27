@@ -8,7 +8,6 @@ object ConfigKeys {
         const val enabled = "goodgame.enabled"
         const val channel = "goodgame.channel"
     }
-
     object Twitch {
         const val enabled = "twitch.enabled"
         const val channel = "twitch.channel"
@@ -22,7 +21,6 @@ object ConfigKeys {
         const val enabled = "youtube.enabled"
         const val channel = "youtube.channel"
     }
-
     object NativeClient {
         private const val prefix = "native-client"
         const val backgroundColor = "$prefix.background-color"
@@ -31,7 +29,6 @@ object ConfigKeys {
         const val hideMessagesAfter = "$prefix.hide-messages-after"
         const val showStatusMessages = "$prefix.show-status-messages"
     }
-
     object ExternalClient {
         private const val prefix = "external-client"
         const val backgroundColor = "$prefix.background-color"
@@ -40,8 +37,8 @@ object ConfigKeys {
         const val hideMessagesAfter = "$prefix.hide-messages-after"
         const val showStatusMessages = "$prefix.show-status-messages"
     }
-
     const val language = "language"
+    const val theme = "theme"
     const val skin = "skin"
     const val frame = "frame"
     const val onTop = "on-top"
@@ -50,7 +47,6 @@ object ConfigKeys {
     const val clickTransparency = "click-transparency"
     const val showClickTransparencyIcon = "show-click-transparency-icon"
     const val saveMessageHistory = "save-message-history"
-
     object Obs {
         const val enabled = "obs.enabled"
         const val host = "obs.host"
@@ -58,7 +54,6 @@ object ConfigKeys {
         const val password = "obs.password"
         const val autoRefresh = "obs.auto-refresh"
     }
-
     object Tts {
         const val enabled = "tts.enabled"
         const val voice = "tts.voice"
@@ -68,7 +63,6 @@ object ConfigKeys {
         const val maxCharacters = "tts.max-characters"
         const val queueCapacity = "tts.queue-capacity"
     }
-
     const val opacity = "opacity"
     const val showOriginBadges = "show-origin-badges"
     const val showUserBadges = "show-user-badges"
@@ -79,7 +73,6 @@ object ConfigKeys {
     const val showHiddenMessages = "show-hidden-messages"
 
     const val resetConfiguration = "reset-configuration"
-
     const val frankerfacezApiUrl = "frankerfacez.api-url"
 
     fun lastUpdatedEmoticons(origin: Origin): String = "${origin.commonName}.emoticons.last-updated"

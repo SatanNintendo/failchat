@@ -44,13 +44,11 @@ class ChatFrame(
     private companion object {
         val logger = KotlinLogging.logger {}
     }
-
     private val decoratedStage: Stage = buildChatStage(StageStyle.DECORATED)
     private val transparentStage: Stage = buildChatStage(StageStyle.TRANSPARENT)
     private val webView: WebView = WebView()
     private val webEngine: WebEngine = webView.engine
     private val chatScene: Scene = buildChatScene()
-
     // context menu
     private val switchDecorationsItem: CheckMenuItem = CheckMenuItem()
     private val onTopItem: CheckMenuItem = CheckMenuItem()
@@ -62,7 +60,6 @@ class ChatFrame(
     private val showHiddenMessages: CheckMenuItem = CheckMenuItem()
     private val clearChatItem = MenuItem()
     private val closeChatItem = MenuItem()
-
     // hot keys
     private val switchDecorationsKey = KeyCode.F
     private val onTopKey = KeyCode.O
@@ -74,7 +71,6 @@ class ChatFrame(
 
     private var currentStage: Stage = decoratedStage
     private var lastOpenedSkinUrl: String? = null
-
     init {
         if (skins.isEmpty()) throw IllegalArgumentException("Empty skins")
         UiLanguage.addListener(::updateLocalization)
@@ -90,7 +86,6 @@ class ChatFrame(
             currentStage = transparentStage
             chatScene.fill = Color.TRANSPARENT
         }
-
         configureChatStage(currentStage)
         updateContextMenu()
 
@@ -98,7 +93,6 @@ class ChatFrame(
 
         showChatStage(currentStage)
     }
-
     private fun loadSkin() {
         val skinName = config.getString(ConfigKeys.skin)
         try {
@@ -110,7 +104,6 @@ class ChatFrame(
             }
             val url = "http://${FailchatServerInfo.host.hostAddress}:${FailchatServerInfo.port}/chat/${skin.name}" +
                     optionalPortParam
-
             lastOpenedSkinUrl = url
             webEngine.load(url)
         } catch (e: MalformedURLException) {
@@ -127,7 +120,6 @@ class ChatFrame(
     fun clearWebContent() {
         webEngine.loadContent("")
     }
-
     private fun buildChatStage(style: StageStyle): Stage {
         val stage = Stage()
         stage.title = "failchat"
@@ -146,7 +138,6 @@ class ChatFrame(
         if (ctConfigurator == null) {
             clickTransparencyItem.isDisable = true
         }
-
         // Build items
         fun Button.configureZoomButton(): Button = this.apply {
             minHeight = 20.0
@@ -155,7 +146,6 @@ class ChatFrame(
             maxWidth = 20.0
             padding = Insets.EMPTY
         }
-
         val minusButton = Button("-").configureZoomButton()
         val plusButton = Button("+").configureZoomButton()
         val zoomBox = HBox(zoomLabelText, minusButton, zoomValueText, Text("%"), plusButton).apply {
@@ -163,7 +153,6 @@ class ChatFrame(
             padding = Insets(0.0, 0.0, 0.0, 15.0)
         }
         val zoomItem = CustomMenuItem(zoomBox, false)
-
         // Shortcuts
         switchDecorationsItem.accelerator = KeyCombination.valueOf(switchDecorationsKey.name)
         onTopItem.accelerator = KeyCombination.valueOf(onTopKey.name)
@@ -172,14 +161,15 @@ class ChatFrame(
         clearChatItem.accelerator = KeyCombination.valueOf(clearChatKey.name)
         showHiddenMessages.accelerator = KeyCombination.valueOf(showHiddenMessagesKey.name)
         closeChatItem.accelerator = KeyCombination.valueOf(closeChatKey.name)
-
         // Build context menu
         val contextMenu = ContextMenu(
                 switchDecorationsItem, onTopItem, clickTransparencyItem, viewersItem, zoomItem, SeparatorMenuItem(),
                 clearChatItem, showHiddenMessages, SeparatorMenuItem(),
                 closeChatItem
         )
-
+        contextMenu.sceneProperty().addListener { _, _, popupScene ->
+            UiTheme.apply(popupScene)
+        }
         // Show/hide context menu
         chatScene.setOnMouseClicked { mouseEvent ->
             if (mouseEvent.button == MouseButton.SECONDARY) {
@@ -188,7 +178,6 @@ class ChatFrame(
                 contextMenu.hide()
             }
         }
-
         // Menu items callbacks
         switchDecorationsItem.setOnAction { switchDecorations() }
         onTopItem.setOnAction { toggleOnTop() }
@@ -201,7 +190,6 @@ class ChatFrame(
         clearChatItem.setOnAction { guiEventHandler.value.handleClearChat() }
         showHiddenMessages.setOnAction { toggleShowHiddenMessages() }
         closeChatItem.setOnAction { guiEventHandler.value.handleStopChat() }
-
         // Zoom item callbacks
         fun Button.configureZoomButtonCallback(elementNumberToGet: Int, filter: (Int, List<Int>) -> Boolean) = this.setOnAction {
             val oldValue = config.getInt(ConfigKeys.zoomPercent)
@@ -216,7 +204,6 @@ class ChatFrame(
             guiEventHandler.value.handleConfigurationChange()
             zoomValueText.text = newValue.toString()
         }
-
         minusButton.configureZoomButtonCallback(0) { oldValue, range ->
             oldValue in (range[0] + 1)..range[1]
         }
@@ -224,14 +211,12 @@ class ChatFrame(
             oldValue in range[0]..(range[1] - 1)
         }
     }
-
     private fun buildChatScene(): Scene {
         webEngine.userAgent = webEngine.userAgent + "/failchat"
         val chatScene = Scene(webView)
         webView.style = "-fx-background-color: transparent;"
         webView.isContextMenuEnabled = false
-
-        // logging
+        // logging + status localization bridge
         webEngine.loadWorker.stateProperty().addListener { _, _, _ ->
             val window = webEngine.executeScript("window") as JSObject
             window.setMember("javaLogger", WebViewLogger)
@@ -244,13 +229,17 @@ class ChatFrame(
                 };
             """.trimIndent())
         }
-
+        webEngine.loadWorker.stateProperty().addListener { _, _, newValue ->
+            if (newValue == Worker.State.SUCCEEDED) {
+                installWebStatusLocalization()
+                updateWebStatusLocalization()
+            }
+        }
         // hot keys
         chatScene.setOnKeyReleased { key ->
             if (key.isControlDown || key.isAltDown || key.isShiftDown || key.isMetaDown) {
                 return@setOnKeyReleased
             }
-
             when (key.code) {
                 switchDecorationsKey -> switchDecorations()
                 onTopKey -> onTopItem.isSelected = toggleOnTop()
@@ -266,7 +255,6 @@ class ChatFrame(
                 else -> {}
             }
         }
-
         // intercept url opening
         webEngine.loadWorker.stateProperty().addListener { _, _, newValue ->
             // WebEngine.locationProperty не изменяется обратно после LoadWorker.cancel()
@@ -286,6 +274,73 @@ class ChatFrame(
         return chatScene
     }
 
+    private fun installWebStatusLocalization() {
+        val script = """
+            (function() {
+                if (window.__failchatStatusLocalizationInstalled) return;
+                window.__failchatStatusLocalizationInstalled = true;
+                window.__failchatStatusLabels = { connected: "connected", disconnected: "disconnected" };
+
+                function updateStatusNodes(root) {
+                    var container = root && root.querySelectorAll ? root : document;
+                    var nodes = container.querySelectorAll(".status-message .status-text");
+                    for (var i = 0; i < nodes.length; i++) {
+                        var node = nodes[i];
+                        var raw = node.getAttribute("data-failchat-status");
+                        if (!raw) {
+                            raw = (node.textContent || "").replace(/^\\s+|\\s+$/g, "").toLowerCase();
+                            if (raw !== "connected" && raw !== "disconnected") continue;
+                            node.setAttribute("data-failchat-status", raw);
+                        }
+                        var value = window.__failchatStatusLabels[raw];
+                        if (typeof value === "string") node.textContent = value;
+                    }
+                }
+
+                window.failchatSetStatusLabels = function(connected, disconnected) {
+                    window.__failchatStatusLabels = {
+                        connected: connected,
+                        disconnected: disconnected
+                    };
+                    updateStatusNodes(document);
+                };
+
+                updateStatusNodes(document);
+                var target = document.getElementById("message-container") || document.body;
+                if (target && window.MutationObserver) {
+                    window.__failchatStatusObserver = new MutationObserver(function(mutations) {
+                        for (var i = 0; i < mutations.length; i++) {
+                            var added = mutations[i].addedNodes;
+                            for (var j = 0; j < added.length; j++) {
+                                if (added[j].nodeType === 1) updateStatusNodes(added[j]);
+                            }
+                        }
+                    });
+                    window.__failchatStatusObserver.observe(target, { childList: true, subtree: true });
+                }
+            })();
+        """.trimIndent()
+
+        runCatching { webEngine.executeScript(script) }
+                .onFailure { logger.debug("Failed to install web chat status localization bridge", it) }
+    }
+
+    private fun updateWebStatusLocalization() {
+        fun escapeJavaScript(value: String): String = value
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n")
+
+        val connected = escapeJavaScript(UiLanguage.text("chat.status.connected"))
+        val disconnected = escapeJavaScript(UiLanguage.text("chat.status.disconnected"))
+        runCatching {
+            webEngine.executeScript("window.failchatSetStatusLabels('$connected', '$disconnected');")
+        }.onFailure {
+            logger.debug("Web chat status localization bridge is not ready", it)
+        }
+    }
+
     private fun switchDecorations() {
         val fromStage = currentStage
         val toStage = if (fromStage === decoratedStage) {
@@ -299,7 +354,6 @@ class ChatFrame(
             chatScene.fill = Color.BLACK
             decoratedStage
         }
-
         saveChatPosition(fromStage)
         hideChatStage(fromStage)
 
@@ -309,7 +363,6 @@ class ChatFrame(
 
         logger.debug("Chat stage was switched from {} to {}", fromStage.style, toStage.style)
     }
-
     private fun configureChatStage(stage: Stage) {
         stage.opacity = config.getDouble(ConfigKeys.opacity) / 100
         stage.isAlwaysOnTop = config.getBoolean(ConfigKeys.onTop)
@@ -325,7 +378,6 @@ class ChatFrame(
             stage.y = y
         }
     }
-
     private fun hideChatStage(stage: Stage) {
         ctConfigurator?.removeClickTransparency(stage)
         stage.hide()
@@ -333,12 +385,12 @@ class ChatFrame(
 
     private fun showChatStage(stage: Stage) {
         stage.scene = chatScene
+        UiTheme.apply(stage.scene)
         stage.show()
 
         // handle can be accessed only after a window is shown for the first time
         ctConfigurator?.configureClickTransparency(stage)
     }
-
     private fun saveChatPosition(stage: Stage) {
         config.setProperty("chat.width", stage.width.toInt())
         config.setProperty("chat.height", stage.height.toInt())
@@ -349,7 +401,6 @@ class ChatFrame(
             config.setProperty("chat.y", stage.y.toInt())
         }
     }
-
     private fun updateLocalization() {
         switchDecorationsItem.text = UiLanguage.text("chat.menu.show-frame")
         onTopItem.text = UiLanguage.text("chat.menu.on-top")
@@ -359,8 +410,8 @@ class ChatFrame(
         zoomLabelText.text = UiLanguage.text("chat.menu.zoom")
         clearChatItem.text = UiLanguage.text("chat.menu.clear-chat")
         closeChatItem.text = UiLanguage.text("chat.menu.close-chat")
+        updateWebStatusLocalization()
     }
-
     private fun updateContextMenu() {
         switchDecorationsItem.isSelected = config.getBoolean(ConfigKeys.frame)
         onTopItem.isSelected = config.getBoolean(ConfigKeys.onTop)
@@ -368,7 +419,6 @@ class ChatFrame(
         zoomValueText.text = config.getString(ConfigKeys.zoomPercent)
         showHiddenMessages.isSelected = config.getBoolean(ConfigKeys.showHiddenMessages)
     }
-
     private fun toggleOnTop(): Boolean {
         val newValue = config.invertBoolean(ConfigKeys.onTop)
         currentStage.isAlwaysOnTop = newValue
@@ -377,7 +427,6 @@ class ChatFrame(
 
     private fun toggleClickTransparency(ctf: ClickTransparencyConfigurator): Boolean {
         val clickTransparencyEnabled = config.invertBoolean(ConfigKeys.clickTransparency)
-
         if (clickTransparencyEnabled) {
             // don't override configuration value for onTop option
             currentStage.isAlwaysOnTop = true
@@ -392,7 +441,6 @@ class ChatFrame(
         }
 
         guiEventHandler.value.handleConfigurationChange()
-
         return clickTransparencyEnabled
     }
 
