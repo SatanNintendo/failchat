@@ -1,7 +1,6 @@
 package failchat.gui
 
 import failchat.ConfigKeys
-import javafx.beans.value.ChangeListener
 import javafx.collections.ListChangeListener
 import javafx.scene.Scene
 import javafx.scene.control.ComboBox
@@ -168,11 +167,10 @@ object UiTheme {
 
         // A language change can recreate ComboBox cells. Reset the items so the
         // newly translated names are shown immediately.
-        val listener = ChangeListener<UiLanguage.LanguageOption> { _, _, _ ->
+        languageSelector.valueProperty().addListener { _, _, _ ->
             selector.items.setAll(options)
             selector.value = optionFor(currentThemeCode)
         }
-        languageSelector.valueProperty().addListener(listener)
     }
 
     private fun findLanguageSelector(node: javafx.scene.Node): ComboBox<*>? {
