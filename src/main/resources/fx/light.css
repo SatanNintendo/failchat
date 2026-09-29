@@ -20,15 +20,16 @@
 }
 
 .label,
-.text,
+.check-box,
+.radio-button,
+.combo-box,
+.combo-box-base,
+.choice-box,
+.button,
+.toggle-button,
 .text-field,
 .password-field,
 .text-area,
-.check-box,
-.radio-button,
-.choice-box,
-.combo-box,
-.combo-box-base,
 .titled-pane,
 .tab,
 .table-cell,
@@ -38,6 +39,20 @@
 .color-picker,
 .hyperlink {
     -fx-text-fill: #202124;
+}
+
+/* javafx.scene.text.Text uses -fx-fill, not -fx-text-fill. */
+.text,
+.text-flow .text,
+.titled-pane > .title > .text,
+.menu .text,
+.menu-item .text,
+.combo-box-base .text,
+.choice-box .text,
+.list-cell .text,
+.table-cell .text,
+.tree-cell .text {
+    -fx-fill: #202124;
 }
 
 .button,
@@ -113,20 +128,38 @@
     -fx-text-fill: #ffffff;
 }
 
+.list-cell:filled:selected .text,
+.table-cell:filled:selected .text,
+.tree-cell:filled:selected .text {
+    -fx-fill: #ffffff;
+}
+
 .table-view .column-header,
 .table-view .filler,
 .table-view .column-header-background {
     -fx-background-color: #e9ecef;
 }
 
-.table-view .column-header .label {
+.table-view .column-header .label,
+.table-view .column-header .text {
     -fx-text-fill: #202124;
+    -fx-fill: #202124;
 }
 
-.combo-box-base .list-cell,
+.combo-box-base .button-cell,
+.combo-box-base .button-cell .text,
+.combo-box .list-cell,
+.combo-box .list-cell .text,
 .choice-box .list-cell,
-.combo-box-popup .list-cell {
+.choice-box .list-cell .text,
+.combo-box-popup .list-cell,
+.combo-box-popup .list-cell .text {
     -fx-text-fill: #202124;
+    -fx-fill: #202124;
+    -fx-background-color: #ffffff;
+}
+
+.combo-box-base .button-cell {
     -fx-background-color: #ffffff;
 }
 
@@ -134,7 +167,13 @@
 .combo-box-popup .list-cell:filled:selected,
 .combo-box-popup .list-cell:hover {
     -fx-text-fill: #ffffff;
+    -fx-fill: #ffffff;
     -fx-background-color: #6656d9;
+}
+
+.combo-box-base .arrow,
+.choice-box .arrow {
+    -fx-background-color: #4f555b;
 }
 
 .tab-pane,
@@ -191,12 +230,22 @@
     -fx-border-color: #9ba1a7;
 }
 
+.check-box:selected .box {
+    -fx-background-color: #6656d9;
+    -fx-border-color: #4d42b5;
+}
+
 .check-box:selected .mark {
     -fx-background-color: #ffffff;
 }
 
-.radio-button:selected .dot {
+.radio-button:selected .radio {
     -fx-background-color: #6656d9;
+    -fx-border-color: #4d42b5;
+}
+
+.radio-button:selected .dot {
+    -fx-background-color: #ffffff;
 }
 
 .hyperlink {
@@ -233,8 +282,11 @@
 }
 
 .menu .label,
-.menu-item .label {
+.menu-item .label,
+.menu .text,
+.menu-item .text {
     -fx-text-fill: #202124;
+    -fx-fill: #202124;
 }
 
 .menu-item:hover,
@@ -248,6 +300,10 @@
     -fx-background-color: #ffffff;
     -fx-text-fill: #202124;
     -fx-border-color: #b9bec4;
+}
+
+.tooltip .text {
+    -fx-fill: #202124;
 }
 
 .combo-box-popup .list-view,
@@ -294,8 +350,11 @@
 }
 
 .dialog-pane .header-panel .label,
-.dialog-pane .content .label {
+.dialog-pane .content .label,
+.dialog-pane .header-panel .text,
+.dialog-pane .content .text {
     -fx-text-fill: #202124;
+    -fx-fill: #202124;
 }
 
 .dialog-pane .button-bar .button {

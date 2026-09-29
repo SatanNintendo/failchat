@@ -5,7 +5,9 @@ import javafx.collections.ListChangeListener
 import javafx.scene.Scene
 import javafx.scene.control.ComboBox
 import javafx.scene.control.Label
+import javafx.scene.control.ListCell
 import javafx.scene.layout.HBox
+import javafx.scene.paint.Color
 import javafx.stage.Window
 import org.apache.commons.configuration2.Configuration
 import java.util.WeakHashMap
@@ -13,17 +15,17 @@ import java.util.WeakHashMap
 /**
  * Runtime JavaFX theme manager.
  *
- * The theme is persisted in the normal user configuration and can be changed
- * without restarting the application. The native JavaFX UI uses one of the
- * bundled stylesheets; the embedded HTML chat skin is intentionally left to
- * its own CSS.
+ * The theme is persisted in the existing user configuration and can be changed
+ * without restarting the application.  The manager also owns the small theme
+ * selector next to the existing language selector in the settings footer.
  */
 object UiTheme {
     private const val DARK = "dark"
     private const val LIGHT = "light"
 
     data class ThemeOption(val code: String, private val textKey: String) {
-        override fun toString(): String = UiLanguage.text(textKey)
+        fun title(): String = UiLanguage.text(textKey)
+        override fun toString(): String = title()
     }
 
     val options = listOf(
@@ -38,6 +40,18 @@ object UiTheme {
         val label: Label,
         val selector: ComboBox<ThemeOption>
     )
+
+    private class ThemeOptionCell : ListCell<ThemeOption>() {
+        override fun updateItem(item: ThemeOption?, empty: Boolean) {
+            super.updateItem(item, empty)
+            if (empty || item == null) {
+                text = null
+            } else {
+                text = item.title()
+            }
+            textFill = Color.web(if (UiTheme.currentCode() == LIGHT) "#202124" else "#f1f3f4")
+        }
+    }
 
     private val controls = WeakHashMap<Scene, ThemeControls>()
     private var installed = false
@@ -76,6 +90,7 @@ object UiTheme {
     fun install() {
         if (installed) {
             Window.getWindows().forEach { apply(it.scene) }
+            refreshSelectors()
             return
         }
 
@@ -91,7 +106,7 @@ object UiTheme {
 
     fun currentCode(): String = currentThemeCode
 
-    fun currentOption(): ThemeOption = options.first { it.code == currentThemeCode }
+    fun currentOption(): ThemeOption = optionFor(currentThemeCode)
 
     fun optionFor(code: String?): ThemeOption {
         val normalized = normalize(code)
@@ -102,42 +117,49 @@ object UiTheme {
         val normalized = normalize(requestedCode)
         val changed = normalized != currentThemeCode
         currentThemeCode = normalized
+
         configuration?.setProperty(ConfigKeys.theme, normalized)
         if (changed) {
             runCatching { onConfigurationChanged?.invoke() }
-                .onFailure { /* Persisting the theme must never break live theme switching. */ }
+                .onFailure { /* A theme change must never break the UI thread. */ }
         }
 
-        if (changed || installed) {
-            Window.getWindows().forEach { apply(it.scene) }
-            refreshSelectors()
-        }
+        // Always apply, even when selecting the already active value. This also
+        // repairs controls created by a popup or a dynamically built dialog.
+        Window.getWindows().forEach { apply(it.scene) }
+        refreshSelectors()
     }
 
     fun apply(scene: Scene?) {
         if (scene == null) return
 
         val stylesheetUrl = stylesheetUrl()
-        scene.stylesheets.removeIf { it == stylesheet(DARK_STYLESHEET) || it == stylesheet(LIGHT_STYLESHEET) }
-        if (!scene.stylesheets.contains(stylesheetUrl)) {
-            scene.stylesheets.add(stylesheetUrl)
-        }
+        val darkUrl = stylesheet(DARK_STYLESHEET)
+        val lightUrl = stylesheet(LIGHT_STYLESHEET)
+        scene.stylesheets.removeAll(darkUrl, lightUrl)
+        scene.stylesheets.add(stylesheetUrl)
 
         installThemeSelector(scene)
+        controls[scene]?.let { styleThemeControls(it) }
     }
 
     private fun refreshForLanguageChange() {
+        // Re-apply CSS too. The selectors recreate their cells when their items
+        // are replaced, and this makes the selected value visible immediately.
+        Window.getWindows().forEach { apply(it.scene) }
         refreshSelectors()
     }
 
     private fun refreshSelectors() {
-        val snapshot = controls.toMap()
+        val snapshot = synchronized(controls) { controls.toMap() }
         snapshot.forEach { (scene, themeControls) ->
-            if (!scene.root.scene.equals(scene)) return@forEach
-            val selectedCode = currentThemeCode
+            if (scene.window == null && scene.root.scene == null) return@forEach
+
             themeControls.label.text = UiLanguage.text("literal.theme")
             themeControls.selector.items.setAll(options)
-            themeControls.selector.value = optionFor(selectedCode)
+            themeControls.selector.value = optionFor(currentThemeCode)
+            styleThemeControls(themeControls)
+            themeControls.selector.refresh()
         }
     }
 
@@ -146,31 +168,40 @@ object UiTheme {
 
         val languageSelector = findLanguageSelector(scene.root) ?: return
         val footer = languageSelector.parent as? HBox ?: return
+        val languageIndex = footer.children.indexOf(languageSelector)
+        if (languageIndex < 0) return
 
-        val label = Label("Theme:")
+        val label = Label(UiLanguage.text("literal.theme"))
         val selector = ComboBox<ThemeOption>().apply {
             prefWidth = 88.0
             maxWidth = 95.0
             items.setAll(options)
             value = currentOption()
+            setCellFactory { ThemeOptionCell() }
+            buttonCell = ThemeOptionCell()
             setOnAction {
                 value?.let { setTheme(it.code) }
             }
         }
 
-        val languageIndex = footer.children.indexOf(languageSelector)
-        if (languageIndex < 0) return
-
         footer.children.add(languageIndex + 1, label)
         footer.children.add(languageIndex + 2, selector)
-        controls[scene] = ThemeControls(label, selector)
 
-        // A language change can recreate ComboBox cells. Reset the items so the
-        // newly translated names are shown immediately.
-        languageSelector.valueProperty().addListener { _, _, _ ->
-            selector.items.setAll(options)
-            selector.value = optionFor(currentThemeCode)
+        val themeControls = ThemeControls(label, selector)
+        synchronized(controls) {
+            controls[scene] = themeControls
         }
+        styleThemeControls(themeControls)
+    }
+
+    private fun styleThemeControls(controls: ThemeControls) {
+        val foreground = if (currentThemeCode == LIGHT) "#202124" else "#f1f3f4"
+        controls.label.style = "-fx-text-fill: $foreground;"
+        controls.selector.style = "-fx-text-fill: $foreground;"
+        controls.selector.buttonCell?.apply {
+            textFill = Color.web(foreground)
+        }
+        controls.selector.refresh()
     }
 
     private fun findLanguageSelector(node: javafx.scene.Node): ComboBox<*>? {

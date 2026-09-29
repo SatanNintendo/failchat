@@ -31,7 +31,6 @@ import org.pircbotx.hooks.events.UnknownEvent
 import java.nio.charset.Charset
 import java.time.Duration
 import java.util.Locale
-import kotlin.random.Random
 import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
 import kotlin.concurrent.thread
@@ -85,7 +84,6 @@ class TwitchChatClient(
                     normalized.contains("login unsuccessful")
         }
 
-        fun anonymousNick(): String = "justinfan${Random.nextInt(10000, 99999)}"
     }
 
     override val origin = Origin.TWITCH
@@ -95,8 +93,7 @@ class TwitchChatClient(
     private val normalizedChannel = normalizeChannel(userName)
     private val normalizedBotName = normalizeBotName(botName)
     private val normalizedBotPassword = normalizeOAuthPassword(botPassword)
-    private val anonymousMode = normalizedBotName.isEmpty() || normalizedBotPassword.isEmpty()
-    private val ircNick = if (anonymousMode) anonymousNick() else normalizedBotName
+    private val ircNick = normalizedBotName
     private val serverEntries = listOf(Configuration.ServerEntry(ircAddress.trim(), ircPort))
     private val atomicStatus: AtomicReference<ChatClientStatus> = AtomicReference(ChatClientStatus.READY)
     private val messageHandlers: List<MessageHandler<TwitchMessage>> = listOf(
@@ -118,6 +115,12 @@ class TwitchChatClient(
         if (normalizedChannel.isEmpty()) {
             logger.error("Twitch channel name is empty; Twitch IRC cannot connect")
         }
+        if (ircNick.isEmpty()) {
+            logger.error("Twitch bot name is empty; Twitch IRC authentication requires the login name of the token owner")
+        }
+        if (normalizedBotPassword.isEmpty()) {
+            logger.error("Twitch OAuth token is empty; authenticated Twitch IRC cannot connect without twitch.bot-password")
+        }
 
         logger.info(
             "Preparing Twitch IRC connection: account='{}', channel='#{}', server='{}:{}', mode={}",
@@ -125,7 +128,7 @@ class TwitchChatClient(
             normalizedChannel,
             ircAddress.trim(),
             ircPort,
-            if (anonymousMode) "anonymous" else "oauth"
+            if (normalizedBotPassword.isEmpty()) "missing-oauth" else "oauth"
         )
 
         val builder = Configuration.Builder()
@@ -143,10 +146,10 @@ class TwitchChatClient(
                 .setSocketFactory(UtilSSLSocketFactory.getDefault())
                 .setAutoReconnect(true)
                 .setAutoReconnectDelay(reconnectTimeout.toMillis().toInt())
-                .setAutoReconnectAttempts(5)
+                .setAutoReconnectAttempts(Int.MAX_VALUE)
                 .setEncoding(Charset.forName("UTF-8"))
 
-        if (!anonymousMode) {
+        if (normalizedBotPassword.isNotEmpty()) {
             builder.setServerPassword(normalizedBotPassword)
         }
 
