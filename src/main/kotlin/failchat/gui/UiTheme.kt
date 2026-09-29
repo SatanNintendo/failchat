@@ -159,7 +159,7 @@ object UiTheme {
             themeControls.selector.items.setAll(options)
             themeControls.selector.value = optionFor(currentThemeCode)
             styleThemeControls(themeControls)
-            themeControls.selector.refresh()
+            themeControls.selector.requestLayout()
         }
     }
 
@@ -201,7 +201,7 @@ object UiTheme {
         controls.selector.buttonCell?.apply {
             textFill = Color.web(foreground)
         }
-        controls.selector.refresh()
+        controls.selector.requestLayout()
     }
 
     private fun findLanguageSelector(node: javafx.scene.Node): ComboBox<*>? {
