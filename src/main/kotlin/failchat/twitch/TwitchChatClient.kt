@@ -208,7 +208,7 @@ class TwitchChatClient(
             val messagesToDelete = runBlocking {
                 history.findTyped<TwitchMessage> { it.author.id.equals(author, ignoreCase = true) }
             }
-            messagesToDelete.forEach(callbacks::onChatMessageDeleted)
+            messagesToDelete.forEach { callbacks.onChatMessageDeleted(it) }
         }
     }
 
