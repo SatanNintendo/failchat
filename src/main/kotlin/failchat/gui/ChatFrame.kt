@@ -289,7 +289,9 @@ class ChatFrame(
                     var key = node.__failchatStatusKey;
                     var translated = window.__failchatStatusLabels[key];
                     if (typeof translated !== "string") return;
-                    node.nodeValue = (node.__failchatStatusPrefix || "") + translated + (node.__failchatStatusSuffix || "");
+                    var replacement = (node.__failchatStatusPrefix || "") + translated + (node.__failchatStatusSuffix || "");
+                    if (node.nodeValue === replacement) return;
+                    node.nodeValue = replacement;
                 }
 
                 function scan(root) {

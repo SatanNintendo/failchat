@@ -2,6 +2,7 @@ package failchat.gui
 
 import failchat.ConfigKeys
 import failchat.failchatHomePath
+import javafx.application.Platform
 import javafx.collections.ListChangeListener
 import javafx.scene.Node
 import javafx.scene.Parent
@@ -25,16 +26,15 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Application-wide runtime localization.
+ * Runtime localization for the native JavaFX UI.
  *
- * FXML contains a lot of plain Text/Labeled values rather than localized keys.
- * We therefore keep the original English value per node and translate it every
- * time the language changes. A reverse translation index is also used for nodes
- * that become visible after a language has already been switched, so their
- * first scan never mistakes a Russian value for the original English value.
+ * A node can be changed by the FXML loader, by a settings listener, or by a
+ * previous language pass. The resolver therefore keeps a stable English source
+ * text, while also understanding already-translated Russian values. Blank
+ * values are never cached, so controls that receive text later still switch
+ * language immediately.
  */
 object UiLanguage {
-
     const val ENGLISH = "en"
     const val RUSSIAN = "ru"
 
@@ -43,13 +43,15 @@ object UiLanguage {
     }
 
     val options = listOf(
-        LanguageOption(ENGLISH, "English"),
-        LanguageOption(RUSSIAN, "Русский")
+            LanguageOption(ENGLISH, "English"),
+            LanguageOption(RUSSIAN, "Русский")
     )
 
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
     private val originalTexts = Collections.synchronizedMap(IdentityHashMap<Any, String>())
     private val translationToEnglish = ConcurrentHashMap<String, String>()
+    private val englishLiteralValues = ConcurrentHashMap.newKeySet<String>()
+    private val normalizedTranslationToEnglish = ConcurrentHashMap<String, String>()
     private var globalWindowListenerInstalled = false
 
     @Volatile
@@ -59,11 +61,7 @@ object UiLanguage {
     private var currentBundle: ResourceBundle = loadBundleSafely(ENGLISH)
 
     fun initialize(config: Configuration) {
-        val configuredCode = try {
-            config.getString(ConfigKeys.language, ENGLISH)
-        } catch (_: Throwable) {
-            ENGLISH
-        }
+        val configuredCode = runCatching { config.getString(ConfigKeys.language, ENGLISH) }.getOrDefault(ENGLISH)
         setLanguage(config, configuredCode, notifyListeners = false)
     }
 
@@ -74,17 +72,13 @@ object UiLanguage {
 
         Window.getWindows().addListener(ListChangeListener { change ->
             while (change.next()) {
-                change.addedSubList.forEach { window ->
-                    // Window notifications happen on the JavaFX application thread.
-                    localizeWindow(window)
-                }
+                change.addedSubList.forEach(::localizeWindow)
             }
         })
 
         Window.getWindows().forEach(::localizeWindow)
     }
 
-    /** Best-effort initialization for startup error dialogs shown before Dependencies exist. */
     fun initializeFromUserConfiguration() {
         val userConfigPath = failchatHomePath.resolve("user.properties")
         if (!Files.isRegularFile(userConfigPath)) return
@@ -121,15 +115,17 @@ object UiLanguage {
         currentBundle = loadBundleSafely(normalizedCode)
         rebuildTranslationIndex()
 
-        if (notifyListeners && changed) {
-            // Dedicated window listeners update dynamic values first (OBS state,
-            // buttons, menus, etc.). Then every visible native node is rescanned
-            // so static FXML text changes in the same language switch.
-            listeners.forEach { listener ->
-                runCatching { listener() }
-            }
+        if (!notifyListeners || !changed) return
 
+        // All known settings-specific listeners update dynamic controls first.
+        listeners.forEach { listener -> runCatching { listener() } }
+
+        // A second pass catches nodes created/changed by those listeners.
+        if (Platform.isFxApplicationThread()) {
             Window.getWindows().forEach(::localizeWindow)
+            Platform.runLater { Window.getWindows().forEach(::localizeWindow) }
+        } else {
+            Platform.runLater { Window.getWindows().forEach(::localizeWindow) }
         }
     }
 
@@ -141,13 +137,7 @@ object UiLanguage {
         listeners.remove(listener)
     }
 
-    fun text(key: String): String {
-        return try {
-            currentBundle.getString(key)
-        } catch (_: Exception) {
-            key
-        }
-    }
+    fun text(key: String): String = runCatching { currentBundle.getString(key) }.getOrDefault(key)
 
     fun localize(root: Parent, ignored: Set<Any> = emptySet()) {
         visit(root, ignored)
@@ -161,7 +151,12 @@ object UiLanguage {
     private fun visit(node: Node, ignored: Set<Any>) {
         if (node !in ignored) {
             when (node) {
-                is Labeled -> node.text = translatedLiteral(node, node.text.orEmpty())
+                is Labeled -> {
+                    node.text = translatedLiteral(node, node.text.orEmpty())
+                    node.tooltip?.let { tooltip ->
+                        tooltip.text = translatedLiteral(tooltip, tooltip.text.orEmpty())
+                    }
+                }
                 is TextInputControl -> node.promptText = translatedLiteral(node, node.promptText.orEmpty())
                 is Text -> node.text = translatedLiteral(node, node.text)
             }
@@ -169,10 +164,8 @@ object UiLanguage {
 
         if (node is TabPane) {
             node.tabs.forEach { tab ->
-                if (tab !in ignored) {
-                    tab.text = translatedLiteral(tab, tab.text.orEmpty())
-                }
-                tab.content?.let { content -> visit(content, ignored) }
+                if (tab !in ignored) tab.text = translatedLiteral(tab, tab.text.orEmpty())
+                tab.content?.let { visit(it, ignored) }
             }
         }
 
@@ -180,15 +173,13 @@ object UiLanguage {
             node.columns.forEach { column ->
                 val current = column.text
                 if (current != null && column !in ignored) {
-                    // TableColumn is not a Node, so keep its original value in the
-                    // same identity map and update it like other static literals.
                     column.text = translatedLiteral(column, current)
                 }
             }
         }
 
         if (node is ScrollPane) {
-            node.content?.let { content -> visit(content, ignored) }
+            node.content?.let { visit(it, ignored) }
         }
 
         if (node is Parent) {
@@ -197,66 +188,87 @@ object UiLanguage {
     }
 
     private fun translatedLiteral(owner: Any, currentValue: String): String {
-        val original = synchronized(originalTexts) {
-            originalTexts[owner] ?: run {
-                val candidate = translationToEnglish[currentValue.trim()]
-                val captured = if (candidate != null) englishBundleValue(candidate) else currentValue
-                originalTexts[owner] = captured
-                captured
-            }
+        if (currentValue.trim().isEmpty()) return currentValue
+
+        val normalizedCurrent = normalizeText(currentValue)
+        val reverse = translationToEnglish[currentValue.trim()]
+                ?: normalizedTranslationToEnglish[normalizedCurrent]
+
+        val cached = synchronized(originalTexts) { originalTexts[owner] }
+        val original = when {
+            reverse != null -> reverse
+            englishLiteralValues.contains(currentValue.trim()) -> currentValue
+            englishLiteralValues.contains(normalizedCurrent) -> currentValue
+            cached == null -> currentValue
+            normalizeText(cached) == normalizedCurrent -> cached
+            else -> currentValue
         }
+
+        synchronized(originalTexts) {
+            originalTexts[owner] = original
+        }
+
         return translateLiteral(original)
     }
 
     private fun translateLiteral(value: String): String {
-        if (currentCodeValue == ENGLISH) return value
-        if (value.trim().isEmpty()) return value
+        if (currentCodeValue == ENGLISH || value.trim().isEmpty()) return value
 
-        val translated = try {
-            currentBundle.getString("literal.${literalKey(value.trim())}")
-        } catch (_: Exception) {
-            return value
-        }
-
+        val key = "literal.${literalKey(value.trim())}"
+        val translated = runCatching { currentBundle.getString(key) }.getOrNull() ?: return value
         val leading = value.takeWhile { it.isWhitespace() }
         val trailing = value.takeLastWhile { it.isWhitespace() }
         return leading + translated + trailing
     }
 
-    private fun literalKey(value: String): String {
-        return value
+    private fun literalKey(value: String): String = value
             .lowercase(Locale.ROOT)
             .replace(Regex("[^a-z0-9]+"), "-")
             .trim('-')
-    }
+
+    private fun normalizeText(value: String): String = value
+            .trim()
+            .replace(Regex("\\s+"), " ")
 
     private fun rebuildTranslationIndex() {
         val english = loadBundleSafely(ENGLISH)
         val russian = loadBundleSafely(RUSSIAN)
-        val result = HashMap<String, String>()
+        val reverseExact = HashMap<String, String>()
+        val reverseNormalized = HashMap<String, String>()
+        val englishValues = HashSet<String>()
 
-        fun add(bundle: ResourceBundle) {
-            val keys = bundle.keys
-            while (keys.hasMoreElements()) {
-                val key = keys.nextElement()
-                if (!key.startsWith("literal.")) continue
-                val value = runCatching { bundle.getString(key) }.getOrNull() ?: continue
-                if (value.isNotEmpty()) result.putIfAbsent(value.trim(), key)
+        fun addEnglish() {
+            english.keys.asSequence().filter { it.startsWith("literal.") }.forEach { key ->
+                val value = runCatching { english.getString(key) }.getOrNull() ?: return@forEach
+                if (value.isNotEmpty()) {
+                    val trimmed = value.trim()
+                    englishValues.add(trimmed)
+                    englishValues.add(normalizeText(trimmed))
+                    reverseExact.putIfAbsent(trimmed, value)
+                    reverseNormalized.putIfAbsent(normalizeText(trimmed), value)
+                }
             }
         }
 
-        add(english)
-        add(russian)
-        translationToEnglish.clear()
-
-        result.forEach { (text, key) ->
-            val englishValue = runCatching { english.getString(key) }.getOrNull() ?: return@forEach
-            translationToEnglish[text] = englishValue
+        fun addRussian() {
+            russian.keys.asSequence().filter { it.startsWith("literal.") }.forEach { key ->
+                val value = runCatching { russian.getString(key) }.getOrNull() ?: return@forEach
+                val englishValue = runCatching { english.getString(key) }.getOrNull() ?: return@forEach
+                if (value.isNotEmpty()) {
+                    reverseExact.putIfAbsent(value.trim(), englishValue)
+                    reverseNormalized.putIfAbsent(normalizeText(value), englishValue)
+                }
+            }
         }
-    }
 
-    private fun englishBundleValue(key: String): String {
-        return runCatching { loadBundleSafely(ENGLISH).getString(key) }.getOrDefault(key)
+        addEnglish()
+        addRussian()
+        translationToEnglish.clear()
+        translationToEnglish.putAll(reverseExact)
+        normalizedTranslationToEnglish.clear()
+        normalizedTranslationToEnglish.putAll(reverseNormalized)
+        englishLiteralValues.clear()
+        englishLiteralValues.addAll(englishValues)
     }
 
     private fun loadBundleSafely(code: String): ResourceBundle {
@@ -270,7 +282,6 @@ object UiLanguage {
 
     private object EmptyResourceBundle : ResourceBundle() {
         override fun handleGetObject(key: String): Any? = null
-
         override fun getKeys(): Enumeration<String> = Collections.emptyEnumeration()
     }
 }

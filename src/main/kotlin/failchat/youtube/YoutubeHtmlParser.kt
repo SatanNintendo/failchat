@@ -105,11 +105,13 @@ class YoutubeHtmlParser(private val mapper: ObjectMapper = ObjectMapper()) {
     }
 
     private fun extractInitialContinuationInternal(initialData: JsonNode): String {
-        val liveChatRenderer = findObjectByKey(initialData, "liveChatRenderer")
-            ?: throw IllegalStateException("YouTube live chat is not available in the page data")
+        // Prefer a continuation belonging to a liveChatRenderer, but do not
+        // assume YouTube keeps the renderer at one fixed JSON path.
+        findLiveChatContinuation(initialData)?.let { return it }
 
-        val direct = findContinuation(liveChatRenderer)
-        if (!direct.isNullOrBlank()) return direct
+        // Some page variants expose the live-chat continuation through a
+        // continuationEndpoint instead of the renderer's continuations array.
+        findContinuation(initialData)?.let { return it }
 
         throw IllegalStateException("YouTube live chat continuation was not found")
     }
@@ -129,6 +131,25 @@ class YoutubeHtmlParser(private val mapper: ObjectMapper = ObjectMapper()) {
         return "YouTube"
     }
 
+    private fun findLiveChatContinuation(node: JsonNode?): String? {
+        if (node == null || node.isMissingNode || node.isNull) return null
+        if (node.isObject) {
+            val renderer = node.get("liveChatRenderer")
+            if (renderer != null) {
+                findContinuation(renderer)?.let { return it }
+            }
+            val fields = node.fields()
+            while (fields.hasNext()) {
+                findLiveChatContinuation(fields.next().value)?.let { return it }
+            }
+        } else if (node.isArray) {
+            for (child in node) {
+                findLiveChatContinuation(child)?.let { return it }
+            }
+        }
+        return null
+    }
+
     private fun findContinuation(node: JsonNode?): String? {
         if (node == null || node.isMissingNode || node.isNull) return null
 
@@ -140,6 +161,16 @@ class YoutubeHtmlParser(private val mapper: ObjectMapper = ObjectMapper()) {
                     if (!token.isNullOrBlank()) return token
                 }
             }
+
+            val direct = node.path("continuation").asText(null)
+            if (!direct.isNullOrBlank()) return direct
+
+            val continuationCommand = node.get("continuationCommand")
+            val commandToken = continuationCommand?.path("token")?.asText(null)
+            if (!commandToken.isNullOrBlank()) return commandToken
+
+            val token = node.path("token").asText(null)
+            if (!token.isNullOrBlank() && node.has("commandMetadata")) return token
 
             val fields = node.fields()
             while (fields.hasNext()) {

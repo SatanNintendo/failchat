@@ -2,22 +2,27 @@ package failchat.gui
 
 import failchat.ConfigKeys
 import javafx.collections.ListChangeListener
+import javafx.scene.Node
+import javafx.scene.Parent
 import javafx.scene.Scene
 import javafx.scene.control.ComboBox
+import javafx.scene.control.Hyperlink
 import javafx.scene.control.Label
+import javafx.scene.control.Labeled
 import javafx.scene.control.ListCell
-import javafx.scene.layout.HBox
+import javafx.scene.control.TextInputControl
 import javafx.scene.paint.Color
+import javafx.scene.text.Text
 import javafx.stage.Window
 import org.apache.commons.configuration2.Configuration
 import java.util.WeakHashMap
 
 /**
- * Runtime JavaFX theme manager.
+ * Application-wide JavaFX theme manager.
  *
- * The theme is persisted in the existing user configuration and can be changed
- * without restarting the application.  The manager also owns the small theme
- * selector next to the existing language selector in the settings footer.
+ * The original settings.fxml uses many javafx.scene.text.Text nodes instead of
+ * Labels. Those nodes do not reliably follow -fx-text-fill, so the theme is
+ * applied both through the stylesheet and directly to the live scene graph.
  */
 object UiTheme {
     private const val DARK = "dark"
@@ -29,16 +34,18 @@ object UiTheme {
     }
 
     val options = listOf(
-        ThemeOption(LIGHT, "theme.light"),
-        ThemeOption(DARK, "theme.dark")
+            ThemeOption(LIGHT, "theme.light"),
+            ThemeOption(DARK, "theme.dark")
     )
 
     private const val DARK_STYLESHEET = "/fx/dark.css"
     private const val LIGHT_STYLESHEET = "/fx/light.css"
+    private const val THEME_CONTROL_PROPERTY = "failchat.theme-cell-configured"
+    private const val LANGUAGE_CONTROL_PROPERTY = "failchat.language-cell-configured"
 
     private data class ThemeControls(
-        val label: Label,
-        val selector: ComboBox<ThemeOption>
+            val label: Label,
+            val selector: ComboBox<ThemeOption>
     )
 
     private class ThemeOptionCell : ListCell<ThemeOption>() {
@@ -49,7 +56,23 @@ object UiTheme {
             } else {
                 text = item.title()
             }
-            textFill = Color.web(if (UiTheme.currentCode() == LIGHT) "#202124" else "#f1f3f4")
+            val foreground = if (UiTheme.currentCode() == LIGHT) "#202124" else "#f1f3f4"
+            textFill = Color.web(foreground)
+            style = "-fx-text-fill: $foreground; -fx-fill: $foreground;"
+        }
+    }
+
+    private class LanguageOptionCell : ListCell<UiLanguage.LanguageOption>() {
+        override fun updateItem(item: UiLanguage.LanguageOption?, empty: Boolean) {
+            super.updateItem(item, empty)
+            if (empty || item == null) {
+                text = null
+            } else {
+                text = item.displayName
+            }
+            val foreground = if (UiTheme.currentCode() == LIGHT) "#202124" else "#f1f3f4"
+            textFill = Color.web(foreground)
+            style = "-fx-text-fill: $foreground; -fx-fill: $foreground;"
         }
     }
 
@@ -73,24 +96,20 @@ object UiTheme {
     fun initialize(config: Configuration, configurationChangedCallback: (() -> Unit)? = null) {
         configuration = config
         onConfigurationChanged = configurationChangedCallback
-        val configuredTheme = try {
+        val configuredTheme = runCatching {
             config.getString(ConfigKeys.theme, DARK)
-        } catch (_: Throwable) {
-            DARK
-        }
+        }.getOrDefault(DARK)
         currentThemeCode = normalize(configuredTheme)
         initialized = true
 
         if (installed) {
             Window.getWindows().forEach { apply(it.scene) }
-            refreshSelectors()
         }
     }
 
     fun install() {
         if (installed) {
             Window.getWindows().forEach { apply(it.scene) }
-            refreshSelectors()
             return
         }
 
@@ -117,17 +136,14 @@ object UiTheme {
         val normalized = normalize(requestedCode)
         val changed = normalized != currentThemeCode
         currentThemeCode = normalized
-
         configuration?.setProperty(ConfigKeys.theme, normalized)
+
+        // Applying immediately is important: the settings window must change
+        // before the click handler returns, without requiring a restart.
+        Window.getWindows().forEach { apply(it.scene) }
         if (changed) {
             runCatching { onConfigurationChanged?.invoke() }
-                .onFailure { /* A theme change must never break the UI thread. */ }
         }
-
-        // Always apply, even when selecting the already active value. This also
-        // repairs controls created by a popup or a dynamically built dialog.
-        Window.getWindows().forEach { apply(it.scene) }
-        refreshSelectors()
     }
 
     fun apply(scene: Scene?) {
@@ -137,29 +153,77 @@ object UiTheme {
         val darkUrl = stylesheet(DARK_STYLESHEET)
         val lightUrl = stylesheet(LIGHT_STYLESHEET)
         scene.stylesheets.removeAll(darkUrl, lightUrl)
-        scene.stylesheets.add(stylesheetUrl)
+        if (!scene.stylesheets.contains(stylesheetUrl)) {
+            scene.stylesheets.add(stylesheetUrl)
+        }
 
+        applyDirectColors(scene.root)
         installThemeSelector(scene)
         controls[scene]?.let { styleThemeControls(it) }
     }
 
     private fun refreshForLanguageChange() {
-        // Re-apply CSS too. The selectors recreate their cells when their items
-        // are replaced, and this makes the selected value visible immediately.
+        // The text itself changes in UiLanguage first. Reapplying the theme
+        // afterwards refreshes all JavaFX Text/Labeled nodes and both selectors.
         Window.getWindows().forEach { apply(it.scene) }
-        refreshSelectors()
     }
 
-    private fun refreshSelectors() {
-        val snapshot = synchronized(controls) { controls.toMap() }
-        snapshot.forEach { (scene, themeControls) ->
-            if (scene.window == null && scene.root.scene == null) return@forEach
+    private fun applyDirectColors(root: Parent) {
+        val foreground = if (currentThemeCode == LIGHT) Color.web("#202124") else Color.web("#f1f3f4")
+        val secondary = if (currentThemeCode == LIGHT) Color.web("#5f6368") else Color.web("#b8bec5")
+        val accent = if (currentThemeCode == LIGHT) Color.web("#4d42b5") else Color.web("#b2a7ff")
 
-            themeControls.label.text = UiLanguage.text("literal.theme")
-            themeControls.selector.items.setAll(options)
-            themeControls.selector.value = optionFor(currentThemeCode)
-            styleThemeControls(themeControls)
-            themeControls.selector.requestLayout()
+        fun walk(node: Node) {
+            when (node) {
+                is Text -> {
+                    node.fill = foreground
+                    node.style = appendStyle(node.style, "-fx-fill: ${toHex(foreground)};")
+                }
+                is Hyperlink -> {
+                    node.textFill = accent
+                    node.style = appendStyle(node.style, "-fx-text-fill: ${toHex(accent)};")
+                }
+                is Labeled -> {
+                    node.textFill = foreground
+                    node.style = appendStyle(node.style, "-fx-text-fill: ${toHex(foreground)};")
+                }
+                is TextInputControl -> {
+                    node.style = appendStyle(node.style, "-fx-text-fill: ${toHex(foreground)}; -fx-prompt-text-fill: ${toHex(secondary)};")
+                }
+            }
+
+            if (node is ComboBox<*>) {
+                styleComboBox(node, foreground)
+            }
+
+            if (node is Parent) {
+                node.childrenUnmodifiable.forEach(::walk)
+            }
+        }
+
+        walk(root)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun styleComboBox(combo: ComboBox<*>, foreground: Color) {
+        combo.style = appendStyle(combo.style, "-fx-text-fill: ${toHex(foreground)};")
+
+        if (combo.items.any { it is UiLanguage.LanguageOption }) {
+            val languageCombo = combo as ComboBox<UiLanguage.LanguageOption>
+            if (languageCombo.properties[LANGUAGE_CONTROL_PROPERTY] != true) {
+                languageCombo.setCellFactory { LanguageOptionCell() }
+                languageCombo.buttonCell = LanguageOptionCell()
+                languageCombo.properties[LANGUAGE_CONTROL_PROPERTY] = true
+            }
+            languageCombo.buttonCell?.apply {
+                textFill = foreground
+                style = "-fx-text-fill: ${toHex(foreground)}; -fx-fill: ${toHex(foreground)};"
+            }
+        } else {
+            combo.buttonCell?.apply {
+                textFill = foreground
+                style = appendStyle(style, "-fx-text-fill: ${toHex(foreground)}; -fx-fill: ${toHex(foreground)};")
+            }
         }
     }
 
@@ -167,7 +231,7 @@ object UiTheme {
         if (controls.containsKey(scene)) return
 
         val languageSelector = findLanguageSelector(scene.root) ?: return
-        val footer = languageSelector.parent as? HBox ?: return
+        val footer = languageSelector.parent as? javafx.scene.layout.HBox ?: return
         val languageIndex = footer.children.indexOf(languageSelector)
         if (languageIndex < 0) return
 
@@ -179,9 +243,7 @@ object UiTheme {
             value = currentOption()
             setCellFactory { ThemeOptionCell() }
             buttonCell = ThemeOptionCell()
-            setOnAction {
-                value?.let { setTheme(it.code) }
-            }
+            setOnAction { value?.let { setTheme(it.code) } }
         }
 
         footer.children.add(languageIndex + 1, label)
@@ -194,24 +256,27 @@ object UiTheme {
         styleThemeControls(themeControls)
     }
 
-    private fun styleThemeControls(controls: ThemeControls) {
-        val foreground = if (currentThemeCode == LIGHT) "#202124" else "#f1f3f4"
-        controls.label.style = "-fx-text-fill: $foreground;"
-        controls.selector.style = "-fx-text-fill: $foreground;"
-        controls.selector.buttonCell?.apply {
-            textFill = Color.web(foreground)
+    private fun styleThemeControls(themeControls: ThemeControls) {
+        val foreground = if (currentThemeCode == LIGHT) Color.web("#202124") else Color.web("#f1f3f4")
+        val css = toHex(foreground)
+        themeControls.label.textFill = foreground
+        themeControls.label.style = appendStyle(themeControls.label.style, "-fx-text-fill: $css;")
+        themeControls.selector.style = appendStyle(themeControls.selector.style, "-fx-text-fill: $css;")
+        themeControls.selector.buttonCell?.apply {
+            textFill = foreground
+            style = "-fx-text-fill: $css; -fx-fill: $css;"
         }
-        controls.selector.requestLayout()
+        themeControls.selector.items.forEach { /* force ListCell recreation through the items property */ }
+        themeControls.selector.requestLayout()
     }
 
-    private fun findLanguageSelector(node: javafx.scene.Node): ComboBox<*>? {
+    private fun findLanguageSelector(node: Node): ComboBox<*>? {
         if (node is ComboBox<*> && node.items.any { it is UiLanguage.LanguageOption }) {
             return node
         }
-        val parent = node as? javafx.scene.Parent ?: return null
+        val parent = node as? Parent ?: return null
         for (child in parent.childrenUnmodifiable) {
-            val found = findLanguageSelector(child)
-            if (found != null) return found
+            findLanguageSelector(child)?.let { return it }
         }
         return null
     }
@@ -221,12 +286,22 @@ object UiTheme {
     }
 
     private fun stylesheetUrl(): String = stylesheet(
-        if (currentThemeCode == LIGHT) LIGHT_STYLESHEET else DARK_STYLESHEET
+            if (currentThemeCode == LIGHT) LIGHT_STYLESHEET else DARK_STYLESHEET
     )
 
-    private fun stylesheet(resource: String): String {
-        return requireNotNull(UiTheme::class.java.getResource(resource)) {
-            "Missing theme stylesheet: $resource"
-        }.toExternalForm()
+    private fun stylesheet(resource: String): String = requireNotNull(UiTheme::class.java.getResource(resource)) {
+        "Missing theme stylesheet: $resource"
+    }.toExternalForm()
+
+    private fun appendStyle(current: String?, addition: String): String {
+        val existing = current?.trim().orEmpty()
+        return if (existing.isEmpty()) addition else "$existing $addition"
     }
+
+    private fun toHex(color: Color): String {
+        fun c(value: Double): String = "%02X".format((value.coerceIn(0.0, 1.0) * 255.0).roundToInt())
+        return "#${c(color.red)}${c(color.green)}${c(color.blue)}"
+    }
+
+    private fun Double.roundToInt(): Int = kotlin.math.round(this).toInt()
 }
