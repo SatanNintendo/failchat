@@ -18,9 +18,9 @@ import org.apache.commons.configuration2.Configuration
 import java.nio.file.Files
 import java.util.Collections
 import java.util.Enumeration
-import java.util.IdentityHashMap
 import java.util.Locale
 import java.util.Properties
+import java.util.WeakHashMap
 import java.util.ResourceBundle
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -48,7 +48,9 @@ object UiLanguage {
     )
 
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
-    private val originalTexts = Collections.synchronizedMap(IdentityHashMap<Any, String>())
+    // JavaFX nodes/tabs/columns do not override equals(), so a WeakHashMap behaves as an identity map
+    // without keeping closed windows alive.
+    private val originalTexts = Collections.synchronizedMap(WeakHashMap<Any, String>())
     private val translationToEnglish = ConcurrentHashMap<String, String>()
     private val englishLiteralValues = ConcurrentHashMap.newKeySet<String>()
     private val normalizedTranslationToEnglish = ConcurrentHashMap<String, String>()
@@ -72,11 +74,11 @@ object UiLanguage {
 
         Window.getWindows().addListener(ListChangeListener { change ->
             while (change.next()) {
-                change.addedSubList.forEach(::localizeWindow)
+                change.addedSubList.forEach { window -> runCatching { localizeWindow(window) } }
             }
         })
 
-        Window.getWindows().forEach(::localizeWindow)
+        localizeAllWindows()
     }
 
     fun initializeFromUserConfiguration() {
@@ -122,10 +124,10 @@ object UiLanguage {
 
         // A second pass catches nodes created/changed by those listeners.
         if (Platform.isFxApplicationThread()) {
-            Window.getWindows().forEach(::localizeWindow)
-            Platform.runLater { Window.getWindows().forEach(::localizeWindow) }
+            localizeAllWindows()
+            Platform.runLater { localizeAllWindows() }
         } else {
-            Platform.runLater { Window.getWindows().forEach(::localizeWindow) }
+            Platform.runLater { localizeAllWindows() }
         }
     }
 
@@ -143,8 +145,13 @@ object UiLanguage {
         visit(root, ignored)
     }
 
+    private fun localizeAllWindows() {
+        // Copy: the list can change while windows are being localized.
+        Window.getWindows().toList().forEach { runCatching { localizeWindow(it) } }
+    }
+
     private fun localizeWindow(window: Window) {
-        val root = window.scene?.root as? Parent ?: return
+        val root = window.scene?.root ?: return
         localize(root)
     }
 
@@ -152,19 +159,32 @@ object UiLanguage {
         if (node !in ignored) {
             when (node) {
                 is Labeled -> {
-                    node.text = translatedLiteral(node, node.text.orEmpty())
+                    // Skin/cell internals bind their text to the owner; those must not be touched.
+                    if (!node.textProperty().isBound) {
+                        node.text = translatedLiteral(node, node.text.orEmpty())
+                    }
                     node.tooltip?.let { tooltip ->
-                        tooltip.text = translatedLiteral(tooltip, tooltip.text.orEmpty())
+                        if (!tooltip.textProperty().isBound) {
+                            tooltip.text = translatedLiteral(tooltip, tooltip.text.orEmpty())
+                        }
                     }
                 }
-                is TextInputControl -> node.promptText = translatedLiteral(node, node.promptText.orEmpty())
-                is Text -> node.text = translatedLiteral(node, node.text)
+                is TextInputControl -> if (!node.promptTextProperty().isBound) {
+                    node.promptText = translatedLiteral(node, node.promptText.orEmpty())
+                }
+                // LabeledText (inside every Button/CheckBox/Label skin) has its text bound to the
+                // control: setting it throws "A bound value cannot be set" and aborts the whole pass.
+                is Text -> if (!node.textProperty().isBound) {
+                    node.text = translatedLiteral(node, node.text.orEmpty())
+                }
             }
         }
 
         if (node is TabPane) {
             node.tabs.forEach { tab ->
-                if (tab !in ignored) tab.text = translatedLiteral(tab, tab.text.orEmpty())
+                if (tab !in ignored && !tab.textProperty().isBound) {
+                    tab.text = translatedLiteral(tab, tab.text.orEmpty())
+                }
                 tab.content?.let { visit(it, ignored) }
             }
         }
@@ -172,7 +192,7 @@ object UiLanguage {
         if (node is TableView<*>) {
             node.columns.forEach { column ->
                 val current = column.text
-                if (current != null && column !in ignored) {
+                if (current != null && column !in ignored && !column.textProperty().isBound) {
                     column.text = translatedLiteral(column, current)
                 }
             }
@@ -183,7 +203,7 @@ object UiLanguage {
         }
 
         if (node is Parent) {
-            node.childrenUnmodifiable.forEach { child -> visit(child, ignored) }
+            node.childrenUnmodifiable.toList().forEach { child -> visit(child, ignored) }
         }
     }
 
@@ -271,10 +291,21 @@ object UiLanguage {
         englishLiteralValues.addAll(englishValues)
     }
 
+    /**
+     * The default ResourceBundle.Control falls back to the JVM default locale before the base bundle.
+     * On a Russian system, requesting "en" would therefore return messages_ru, and switching to
+     * English would never work. English is the base bundle (messages.properties), so look up
+     * Locale.ROOT for it and disable the fallback.
+     */
     private fun loadBundleSafely(code: String): ResourceBundle {
-        val locale = Locale.forLanguageTag(code)
+        val locale = if (code == ENGLISH) Locale.ROOT else Locale.forLanguageTag(code)
         return try {
-            ResourceBundle.getBundle("i18n.messages", locale)
+            ResourceBundle.getBundle(
+                    "i18n.messages",
+                    locale,
+                    UiLanguage::class.java.classLoader,
+                    ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES)
+            )
         } catch (_: Throwable) {
             EmptyResourceBundle
         }

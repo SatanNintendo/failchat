@@ -6,6 +6,7 @@ import failchat.gui.ChatFrameLauncher
 import failchat.gui.GuiLauncher
 import failchat.gui.GuiMode
 import failchat.gui.PortBindAlert
+import failchat.gui.UiLanguage
 import failchat.skin.Skins
 import failchat.util.CoroutineExceptionLogger
 import failchat.util.bytesToMegabytes

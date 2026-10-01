@@ -164,12 +164,19 @@
     -fx-background-color: #2a2d30;
 }
 
-.combo-box-base .list-cell:filled:selected,
 .combo-box-popup .list-cell:filled:selected,
 .combo-box-popup .list-cell:hover {
     -fx-text-fill: #ffffff;
     -fx-fill: #ffffff;
     -fx-background-color: #5e49c9;
+}
+
+/* The combo box button cell is always "selected"; keep it looking like a normal field. */
+.combo-box-base .list-cell.button-cell:filled,
+.combo-box-base .list-cell.button-cell:filled:selected {
+    -fx-background-color: #2a2d30;
+    -fx-text-fill: #f1f3f4;
+    -fx-fill: #f1f3f4;
 }
 
 .combo-box-base .arrow,

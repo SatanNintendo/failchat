@@ -30,6 +30,7 @@ import org.pircbotx.hooks.events.UnknownEvent
 import java.nio.charset.Charset
 import java.time.Duration
 import java.util.Locale
+import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
 import kotlin.concurrent.thread
@@ -50,44 +51,34 @@ class TwitchChatClient(
         private val history: ChatMessageHistory,
         override val callbacks: ChatClientCallbacks
 ) : ChatClient {
+
     private companion object {
         val logger = KotlinLogging.logger {}
         val reconnectTimeout: Duration = Duration.ofSeconds(10)
-        val banMessagePattern: Pattern = Pattern.compile("""^:tmi\\.twitch\\.tv CLEARCHAT #.+ :(.+)""")
+        val banMessagePattern: Pattern = Pattern.compile("""^:tmi\.twitch\.tv CLEARCHAT #.+ :(.+)""")
 
-        fun normalizeChannel(channel: String): String = channel.trim().removePrefix("#").lowercase(Locale.ROOT)
+        /** Twitch accepts read-only anonymous connections for nicks like "justinfan12345". */
+        const val anonymousPassword = "SCHMOOPIIE"
 
-        fun normalizeBotName(name: String): String = name.trim().removePrefix("@").lowercase(Locale.ROOT)
+        fun normalizeChannel(channel: String): String = channel.trim().removePrefix("#").toLowerCase(Locale.ROOT)
 
         fun normalizeOAuthPassword(password: String): String {
             val value = password.trim()
             if (value.isEmpty()) return value
-            return if (value.startsWith("oauth:", ignoreCase = true)) {
-                "oauth:" + value.substringAfter(':').trim()
-            } else {
-                "oauth:$value"
-            }
+            return if (value.startsWith("oauth:", ignoreCase = true)) "oauth:" + value.substring(6).trim() else "oauth:$value"
         }
 
-        fun isAuthenticationFailure(line: String): Boolean {
-            val normalized = line.lowercase(Locale.ROOT)
-            return normalized.contains("login authentication failed") ||
-                    normalized.contains("improperly formatted auth") ||
-                    normalized.contains("authentication failed") ||
-                    normalized.contains("login unsuccessful") ||
-                    normalized.contains("invalid nick")
-        }
+        fun anonymousNick(): String = "justinfan" + ThreadLocalRandom.current().nextInt(10000, 99999)
     }
 
     override val origin = Origin.TWITCH
     override val status: ChatClientStatus get() = atomicStatus.get()
 
+
     private val twitchIrcClient: PircBotX
-    private val normalizedChannel = normalizeChannel(userName)
-    private val normalizedBotName = normalizeBotName(botName)
-    private val normalizedBotPassword = normalizeOAuthPassword(botPassword)
     private val serverEntries = listOf(Configuration.ServerEntry(ircAddress.trim(), ircPort))
-    private val atomicStatus = AtomicReference(ChatClientStatus.READY)
+    private val channel = normalizeChannel(userName)
+    private val atomicStatus: AtomicReference<ChatClientStatus> = AtomicReference(ChatClientStatus.READY)
     private val messageHandlers: List<MessageHandler<TwitchMessage>> = listOf(
             ElementLabelEscaper(),
             twitchEmoticonHandler,
@@ -103,52 +94,50 @@ class TwitchChatClient(
             TwitchAuthorColorHandler()
     )
 
-    init {
-        logger.info(
-                "Preparing Twitch IRC connection: account='{}', channel='#{}', server='{}:{}', tokenPresent={}",
-                normalizedBotName,
-                normalizedChannel,
-                ircAddress.trim(),
-                ircPort,
-                normalizedBotPassword.isNotEmpty()
-        )
 
-        twitchIrcClient = PircBotX(
-                Configuration.Builder()
-                        .setName(normalizedBotName)
-                        .setServerPassword(normalizedBotPassword)
-                        .setServers(serverEntries)
-                        .addAutoJoinChannel("#$normalizedChannel")
-                        .addListener(TwitchIrcListener())
-                        .setSocketFactory(UtilSSLSocketFactory.getDefault())
-                        .setAutoReconnect(false)
-                        .setAutoReconnectDelay(reconnectTimeout.toMillis().toInt())
-                        .setAutoReconnectAttempts(Int.MAX_VALUE)
-                        .setEncoding(Charset.forName("UTF-8"))
-                        .buildConfiguration()
-        )
+    init {
+        // The bot account is optional for reading chat. Release builds without private.properties
+        // have empty credentials, which used to make the connection impossible. In that case
+        // fall back to the anonymous read-only login supported by Twitch IRC.
+        val normalizedBotName = botName.trim().removePrefix("@")
+        val normalizedPassword = normalizeOAuthPassword(botPassword)
+        val useAnonymousLogin = normalizedBotName.isEmpty() || normalizedPassword.isEmpty()
+        val ircNick = if (useAnonymousLogin) anonymousNick() else normalizedBotName.toLowerCase(Locale.ROOT)
+        val ircPassword = if (useAnonymousLogin) anonymousPassword else normalizedPassword
+
+        logger.info {
+            "Twitch irc: channel='#$channel', server='${ircAddress.trim()}:$ircPort', " +
+                    "login=${if (useAnonymousLogin) "anonymous ($ircNick)" else "account '$ircNick'"}"
+        }
+
+        val configuration = Configuration.Builder()
+                .setName(ircNick)
+                .setServerPassword(ircPassword)
+                .setServers(serverEntries)
+                .addAutoJoinChannel("#$channel")
+                .addListener(TwitchIrcListener())
+//                .addCapHandler() //todo try out
+                .setSocketFactory(UtilSSLSocketFactory.getDefault())
+                .setAutoReconnect(false)
+                .setAutoReconnectDelay(reconnectTimeout.toMillis().toInt())
+                .setAutoReconnectAttempts(Int.MAX_VALUE) // bugged, 5 attempts todo retest
+                .setEncoding(Charset.forName("UTF-8"))
+                .setCapEnabled(false)
+                .buildConfiguration()
+
+        twitchIrcClient = PircBotX(configuration)
     }
 
     override fun start() {
-        if (normalizedChannel.isEmpty() || normalizedBotName.isEmpty() || normalizedBotPassword.isEmpty()) {
-            atomicStatus.set(ChatClientStatus.ERROR)
-            logger.error("Twitch IRC is not started because channel, bot name, or OAuth token is missing")
-            callbacks.onStatusUpdate(StatusUpdate(TWITCH, DISCONNECTED))
-            return
-        }
-
-        if (!atomicStatus.compareAndSet(ChatClientStatus.READY, ChatClientStatus.CONNECTING)) {
-            throw IllegalStateException("Expected status: ${ChatClientStatus.READY}")
-        }
+        val statusChanged = atomicStatus.compareAndSet(ChatClientStatus.READY, ChatClientStatus.CONNECTED)
+        if (!statusChanged) throw IllegalStateException("Expected status: ${ChatClientStatus.READY}")
 
         thread(start = true, name = "TwitchIrcClientThread") {
             try {
-                // PircBotX performs DNS/TLS/IRC authentication here. Never run it
-                // on the JavaFX application thread.
                 twitchIrcClient.startBot()
             } catch (e: Exception) {
+                logger.warn("Failed to start twitch irc client", e)
                 atomicStatus.set(ChatClientStatus.ERROR)
-                logger.error("Failed to start Twitch IRC client", e)
                 callbacks.onStatusUpdate(StatusUpdate(TWITCH, DISCONNECTED))
             }
         }
@@ -156,35 +145,48 @@ class TwitchChatClient(
 
     override fun stop() {
         atomicStatus.set(ChatClientStatus.OFFLINE)
-        runCatching { twitchIrcClient.stopBotReconnect() }
-        runCatching { twitchIrcClient.close() }
+        twitchIrcClient.close()
     }
 
     private inner class TwitchIrcListener : ListenerAdapter() {
+
         override fun onConnect(event: ConnectEvent) {
+            logger.info("Connected to irc channel: {}", channel)
             atomicStatus.set(ChatClientStatus.CONNECTED)
-            logger.info("Twitch IRC connected and authenticated; joined channel '#{}'", normalizedChannel)
+            twitchIrcClient.sendCAP().request("twitch.tv/tags")
+            twitchIrcClient.sendCAP().request("twitch.tv/commands")
             callbacks.onStatusUpdate(StatusUpdate(TWITCH, CONNECTED))
         }
 
         override fun onDisconnect(event: DisconnectEvent) {
-            if (atomicStatus.get() == ChatClientStatus.OFFLINE) return
-            atomicStatus.set(ChatClientStatus.ERROR)
-            logger.warn("Twitch IRC disconnected")
-            callbacks.onStatusUpdate(StatusUpdate(TWITCH, DISCONNECTED))
+            when (atomicStatus.get()) {
+                ChatClientStatus.OFFLINE,
+                ChatClientStatus.ERROR -> return
+                else -> {
+                    atomicStatus.set(ChatClientStatus.CONNECTING)
+                    logger.info("Twitch irc client disconnected")
+                    callbacks.onStatusUpdate(StatusUpdate(TWITCH, DISCONNECTED))
+                }
+            }
         }
 
         override fun onMessage(event: MessageEvent) {
-            logger.debug { "Message received from Twitch. ${event.user}: '${event.message}'" }
+            logger.debug {
+                "Message was received from twitch. ${event.user}. Message: '${event.message}'. Tags: '${event.v3Tags}'"
+            }
+
             val message = parseOrdinaryMessage(event)
             messageHandlers.forEach { it.handleMessage(message) }
             callbacks.onChatMessage(message)
         }
 
         override fun onListenerException(event: ListenerExceptionEvent) {
-            logger.warn("Twitch IRC listener exception", event.exception)
+            logger.warn("Listener exception", event.exception)
         }
 
+        /**
+         * Handle "/me" messages.
+         * */
         override fun onAction(event: ActionEvent) {
             val message = parseMeMessage(event)
             messageHandlers.forEach { it.handleMessage(message) }
@@ -192,29 +194,30 @@ class TwitchChatClient(
         }
 
         override fun onUnknown(event: UnknownEvent) {
-            val line = event.line ?: ""
-            logger.debug("Twitch IRC server line: {}", line)
-
-            if (isAuthenticationFailure(line)) {
-                atomicStatus.set(ChatClientStatus.ERROR)
-                logger.error("Twitch IRC authentication failed. Check twitch.bot-name and twitch.bot-password (oauth token with chat:read).")
-                callbacks.onStatusUpdate(StatusUpdate(TWITCH, DISCONNECTED))
-                return
-            }
-
-            val matcher = banMessagePattern.matcher(line)
+            logger.debug("Unknown event: {}", event.line)
+            val matcher = banMessagePattern.matcher(event.line)
             if (!matcher.find()) return
+
             val author = matcher.group(1)
             val messagesToDelete = runBlocking {
                 history.findTyped<TwitchMessage> { it.author.id.equals(author, ignoreCase = true) }
             }
-            messagesToDelete.forEach { callbacks.onChatMessageDeleted(it) }
+
+            messagesToDelete.forEach {
+                callbacks.onChatMessageDeleted(it)
+            }
         }
     }
 
     private fun parseOrdinaryMessage(event: MessageEvent): TwitchMessage {
-        val displayedName = event.v3Tags[TwitchIrcTags.displayName]
-        val author = if (displayedName.isNullOrEmpty()) event.userHostmask.nick.capitalize() else displayedName
+        val displayedName = event.v3Tags.get(TwitchIrcTags.displayName) //could return null (e.g. from twitchnotify)
+        // Если пользователь не менял ник, то в v3tags пусто, ник capitalized
+        val author: String = if (displayedName.isNullOrEmpty()) {
+            event.userHostmask.nick.capitalize()
+        } else {
+            displayedName
+        }
+
         return TwitchMessage(
                 id = messageIdGenerator.generate(),
                 author = author,
@@ -223,10 +226,14 @@ class TwitchChatClient(
         )
     }
 
-    private fun parseMeMessage(event: ActionEvent): TwitchMessage = TwitchMessage(
-            id = messageIdGenerator.generate(),
-            author = event.userHostmask.nick,
-            text = event.message,
-            tags = mapOf()
-    )
+    private fun parseMeMessage(event: ActionEvent): TwitchMessage {
+        // todo emoticons, color
+        return TwitchMessage(
+                id = messageIdGenerator.generate(),
+                author = event.userHostmask.nick,
+                text = event.message,
+                tags = mapOf()
+        )
+    }
+
 }

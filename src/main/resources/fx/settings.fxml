@@ -896,7 +896,7 @@
                 </Tab>
             </tabs>
         </TabPane>
-        <HBox alignment="CENTER" spacing="8.0">
+        <HBox alignment="CENTER" spacing="6.0">
             <children>
                 <Text strokeType="OUTSIDE" strokeWidth="0.0" text="Language:">
                     <font>
