@@ -125,17 +125,27 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $privateConfig = 'src/main/resources/config/private.properties'
+          # NOTE: Windows PowerShell 5.1 "Set-Content -Encoding utf8" writes a UTF-8 BOM.
+          # The BOM becomes a part of the first key ("twitch.bot-name"), the key is "lost",
+          # and starting the Twitch/YouTube chats fails. Always write the file WITHOUT a BOM.
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $privateConfig = Join-Path $env:GITHUB_WORKSPACE 'src/main/resources/config/private.properties'
 
           if (-not (Test-Path $privateConfig)) {
-            @(
+            $content = @(
               'twitch.bot-name='
               'twitch.bot-password='
               'twitch.client-id='
               'twitch.client-secret='
-            ) | Set-Content `
-              -Path $privateConfig `
-              -Encoding utf8
+            ) -join "`n"
+
+            [System.IO.File]::WriteAllText($privateConfig, $content + "`n", $utf8NoBom)
+          }
+
+          # Verify: the first bytes must not be a UTF-8 BOM (EF BB BF)
+          $head = [System.IO.File]::ReadAllBytes($privateConfig) | Select-Object -First 3
+          if ($head.Count -ge 3 -and $head[0] -eq 0xEF -and $head[1] -eq 0xBB -and $head[2] -eq 0xBF) {
+            throw "private.properties starts with a UTF-8 BOM"
           }
 
       - name: Fix Kotlin source compatibility
@@ -143,8 +153,9 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $mainFile = 'src/main/kotlin/failchat/FailchatMain.kt'
-          $ttsFile = 'src/main/kotlin/failchat/tts/StreamElementsTtsClient.kt'
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $mainFile = Join-Path $env:GITHUB_WORKSPACE 'src/main/kotlin/failchat/FailchatMain.kt'
+          $ttsFile = Join-Path $env:GITHUB_WORKSPACE 'src/main/kotlin/failchat/tts/StreamElementsTtsClient.kt'
 
           if (-not (Test-Path $mainFile)) {
             throw "File not found: $mainFile"
@@ -155,7 +166,7 @@ jobs:
           }
 
           # Fix missing UiLanguage import.
-          $text = Get-Content -Path $mainFile -Raw
+          $text = [System.IO.File]::ReadAllText($mainFile)
 
           if ($text -notmatch '(?m)^import failchat\.gui\.UiLanguage\s*$') {
             $marker = 'import failchat.gui.PortBindAlert'
@@ -170,14 +181,10 @@ jobs:
             )
           }
 
-          Set-Content `
-            -Path $mainFile `
-            -Value $text `
-            -Encoding utf8 `
-            -NoNewline
+          [System.IO.File]::WriteAllText($mainFile, $text, $utf8NoBom)
 
           # Fix OkHttp 4 API changes.
-          $text = Get-Content -Path $ttsFile -Raw
+          $text = [System.IO.File]::ReadAllText($ttsFile)
 
           if ($text -notmatch '(?m)^import okhttp3\.HttpUrl\.Companion\.toHttpUrlOrNull\s*$') {
             $marker = 'import okhttp3.HttpUrl'
@@ -217,11 +224,7 @@ jobs:
             'response.body'
           )
 
-          Set-Content `
-            -Path $ttsFile `
-            -Value $text `
-            -Encoding utf8 `
-            -NoNewline
+          [System.IO.File]::WriteAllText($ttsFile, $text, $utf8NoBom)
 
       - name: Build
         shell: powershell
