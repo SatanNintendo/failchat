@@ -15,7 +15,7 @@ class PortBindAlert : Application() {
 
         alert.title = UiLanguage.text("dialog.launch-error.title")
         alert.headerText = UiLanguage.text("dialog.launch-error.header")
-        alert.contentText = UiLanguage.text("dialog.launch-error.content") + "${FailchatServerInfo.host.hostAddress}:${FailchatServerInfo.port}"
+        alert.contentText = UiLanguage.text("dialog.launch-error.content") + " ${FailchatServerInfo.host.hostAddress}:${FailchatServerInfo.port}"
 
         val stage = alert.dialogPane.scene.window as Stage
         stage.icons.setAll(Images.appIcon)

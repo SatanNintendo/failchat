@@ -1,7 +1,7 @@
-# Сообщения от сервера
+# Server messages
 
 #### Chat message 
-Сообщение из чата   
+A message from a chat   
 `content.author.color: String (hex color) | null (default skin color)`  
 `content.badges.type: "image" | "character"`  
 `content.badges.format: "raster" | "vector" | undefined (for character badge type)`  
@@ -108,7 +108,7 @@
 ```
 
 #### Origins status
-Список подключённых и отключённых источников.   
+The list of connected and disconnected origins.   
 ```json
 {
     "type": "origins-status",
@@ -123,8 +123,8 @@
 ```
 
 #### Viewers message
-Текущие подключённые источники и количество зрителей на их каналах. 
-`null` означает что не удалось получить количество зрителей, но счётчик включён 
+The currently connected origins and the viewer counts of their channels. 
+`null` means that the viewer count could not be retrieved, but the counter is enabled 
 ```json
 {
     "type": "viewers-count",
@@ -137,7 +137,7 @@
 ```
 
 #### Delete message 
-Удаление сообщения из чата
+Removes a message from the chat
 ```json
 {
     "type": "delete-message",
@@ -148,7 +148,7 @@
 ```
 
 #### Clear chat
-Очистить все сообщения в чате
+Clears all messages in the chat
 ```json
 {
     "type": "clear-chat",
@@ -157,7 +157,7 @@
 ```
 
 
-# Сообщения от клиента
+# Client messages
 
 #### Client configuration request 
 ```json
@@ -168,7 +168,7 @@
 ```
 
 #### Delete message
-Запрос клиента на удаление сообщения
+A client request to delete a message
 ```json
 {
     "type": "delete-message",
@@ -179,7 +179,7 @@
 ```
 
 #### Ignore user
-Запрос клиента на блокировку сообщений от пользователя
+A client request to block messages from a user
 ```json
 {
     "type": "ignore-author",

@@ -264,8 +264,8 @@ class AppStateManager(private val deps: Dependencies) {
             }
         }
 
-        // Значение может быть null если вызваны handleShutDown() и handleStopChat() последовательно, в любой последовательности,
-        // либо если приложение было закрыто без запуска чата.
+        // The value can be null if handleShutDown() and handleStopChat() were called sequentially in any order,
+        // or if the application was closed without starting the chat.
         viewersCounter?.stop()
     }
 

@@ -5,7 +5,7 @@ import failchat.chat.Elements
 import failchat.chat.MessageHandler
 
 /**
- * Заменяет символы '{' и '}' на html entity.
+ * Replaces the '{' and '}' characters with html entities.
  */
 class ElementLabelEscaper<in T : ChatMessage> : MessageHandler<T> {
 

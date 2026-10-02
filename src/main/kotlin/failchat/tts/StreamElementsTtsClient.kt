@@ -1,7 +1,7 @@
 package failchat.tts
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -33,7 +33,7 @@ class StreamElementsTtsClient(
      */
     fun synthesize(text: String, voice: String, key: String, apiUrl: String): Path {
         val resolvedKey = resolveAuthToken(key)
-        val url = HttpUrl.parse(apiUrl)?.newBuilder()
+        val url = apiUrl.toHttpUrlOrNull()?.newBuilder()
             ?.addQueryParameter("voice", voice)
             ?.addQueryParameter("text", text)
             ?.addQueryParameter("key", resolvedKey)
@@ -47,10 +47,10 @@ class StreamElementsTtsClient(
 
         requestClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw IOException("TTS service returned HTTP ${response.code()}")
+                throw IOException("TTS service returned HTTP ${response.code}")
             }
 
-            val body = response.body()
+            val body = response.body
                 ?: throw IOException("TTS service returned an empty response")
 
             val contentLength = body.contentLength()

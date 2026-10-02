@@ -1,7 +1,7 @@
 package failchat.chat
 
 /**
- * Класс, сериализующийся в json для отправки к websocket клиентам.
+ * A class serialized to json to be sent to websocket clients.
  */
 data class Link(
         val fullUrl: String,

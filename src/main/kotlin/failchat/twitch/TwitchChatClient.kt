@@ -211,7 +211,7 @@ class TwitchChatClient(
 
     private fun parseOrdinaryMessage(event: MessageEvent): TwitchMessage {
         val displayedName = event.v3Tags.get(TwitchIrcTags.displayName) //could return null (e.g. from twitchnotify)
-        // Если пользователь не менял ник, то в v3tags пусто, ник capitalized
+        // If the user has not changed the nick, v3tags is empty and the nick is capitalized
         val author: String = if (displayedName.isNullOrEmpty()) {
             event.userHostmask.nick.capitalize()
         } else {

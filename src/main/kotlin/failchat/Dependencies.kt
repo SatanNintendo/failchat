@@ -133,10 +133,19 @@ class Dependencies {
     )
 
     // OBS integration uses the existing Java-WebSocket and Jackson dependencies.
+    // A dedicated single-threaded executor is required: the OBS state machine keeps its
+    // state unsynchronized and relies on tasks being executed strictly sequentially,
+    // while the shared background pool has multiple worker threads.
+    val obsExecutorService: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor {
+        Thread(it, "ObsWebSocketService").apply {
+            isDaemon = true
+            priority = Thread.NORM_PRIORITY - 1
+        }
+    }
     val obsWebSocketService = ObsWebSocketService(
         configuration,
         objectMapper,
-        backgroundExecutorService
+        obsExecutorService
     )
 
 

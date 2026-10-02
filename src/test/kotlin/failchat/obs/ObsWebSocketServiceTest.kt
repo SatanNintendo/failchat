@@ -1,15 +1,28 @@
 package failchat.obs
 
-import io.kotest.core.spec.style.StringSpec
+import com.fasterxml.jackson.databind.ObjectMapper
+import failchat.FailchatServerInfo
 import io.kotest.matchers.shouldBe
+import org.apache.commons.configuration2.PropertiesConfiguration
+import org.junit.Test
+import java.util.concurrent.Executors
 
-class ObsWebSocketServiceTest : StringSpec({
-    "creates obs-websocket authentication according to protocol 5.x" {
-        val service = ObsWebSocketService(
-            config = throw UnsupportedOperationException("not required"),
-            objectMapper = throw UnsupportedOperationException("not required"),
-            executor = throw UnsupportedOperationException("not required")
+class ObsWebSocketServiceTest {
+
+    private fun createService(): ObsWebSocketService {
+        // createAuthentication() and isFailchatBrowserSourceUrl() do not use
+        // the injected dependencies, so lightweight instances are enough here.
+        // The executor creates its worker thread lazily and no tasks are ever submitted.
+        return ObsWebSocketService(
+            config = PropertiesConfiguration(),
+            objectMapper = ObjectMapper(),
+            executor = Executors.newSingleThreadScheduledExecutor()
         )
+    }
+
+    @Test
+    fun createsAuthenticationAccordingToProtocol5x() {
+        val service = createService()
 
         service.createAuthentication(
             password = "supersecretpassword",
@@ -18,15 +31,12 @@ class ObsWebSocketServiceTest : StringSpec({
         ) shouldBe "1Ct943GAT+6YQUUX47Ia/ncufilbe6+oD6lY+5kaCu4="
     }
 
-    "recognizes only local failchat Browser Source URLs on the active port" {
-        val oldPort = failchat.FailchatServerInfo.port
-        failchat.FailchatServerInfo.port = 10880
+    @Test
+    fun recognizesOnlyLocalFailchatBrowserSourceUrlsOnTheActivePort() {
+        val oldPort = FailchatServerInfo.port
+        FailchatServerInfo.port = 10880
         try {
-            val service = ObsWebSocketService(
-                config = throw UnsupportedOperationException("not required"),
-                objectMapper = throw UnsupportedOperationException("not required"),
-                executor = throw UnsupportedOperationException("not required")
-            )
+            val service = createService()
 
             service.isFailchatBrowserSourceUrl("http://127.0.0.1:10880/chat/old_sc2tv") shouldBe true
             service.isFailchatBrowserSourceUrl("http://localhost:10880/chat") shouldBe true
@@ -36,7 +46,7 @@ class ObsWebSocketServiceTest : StringSpec({
             service.isFailchatBrowserSourceUrl("http://example.com:10880/chat") shouldBe false
             service.isFailchatBrowserSourceUrl("http://127.0.0.1:10880/resources/old_sc2tv/old_sc2tv.html") shouldBe false
         } finally {
-            failchat.FailchatServerInfo.port = oldPort
+            FailchatServerInfo.port = oldPort
         }
     }
-})
+}

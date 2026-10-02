@@ -16,7 +16,7 @@ import java.nio.file.Path
 
 
 /**
- * Загружает и сохраняет конфигурацию.
+ * Loads and saves the configuration.
  * */
 class ConfigLoader(private val configDirectory: Path) {
 
@@ -39,8 +39,8 @@ class ConfigLoader(private val configDirectory: Path) {
         val userConfigBuilder = createOptionalConfig(userConfigPath)
         val userConfig = userConfigBuilder.configuration
 
-        // Если передавать в конструктор CompositeConfiguration как inMemoryConfig,
-        // он будет последний в списке на чтение
+        // If passed to the CompositeConfiguration constructor as inMemoryConfig,
+        // it would be the last one in the lookup order
         val compositeConfig = CompositeConfiguration()
 
         compositeConfig.addConfiguration(userConfig, true)

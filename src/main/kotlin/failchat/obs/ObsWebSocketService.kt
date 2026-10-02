@@ -75,6 +75,7 @@ class ObsWebSocketService(
     private val pendingRequests = mutableMapOf<String, (JsonNode) -> Unit>()
     private val pendingRefreshes = mutableListOf<PendingRefresh>()
 
+    @Volatile
     private var stopped = false
     private var persistentConnectionEnabled = false
     private var automaticRefreshEnabled = true
@@ -657,7 +658,7 @@ class ObsWebSocketService(
             return false
         }
 
-        if (!uri.scheme.equals("http", ignoreCase = true)) return false
+        if (!"http".equals(uri.scheme, ignoreCase = true)) return false
         if (uri.port != FailchatServerInfo.port) return false
 
         val host = uri.host?.lowercase()?.removePrefix("[")?.removeSuffix("]") ?: return false

@@ -6,7 +6,7 @@ import failchat.chat.Link
 import failchat.chat.MessageHandler
 
 /**
- * Заменяет элементы типа [Link] на [Image] в зависимости от конфигурации.
+ * Replaces [Link] elements with [Image] ones depending on the configuration.
  * */
 class ImageLinkHandler : MessageHandler<ChatMessage> {
 

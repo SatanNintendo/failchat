@@ -1,7 +1,7 @@
 package failchat
 
 /**
- * Первоисточник сообщений / emoticon'ов.
+ * An origin of messages / emoticons.
  */
 enum class Origin(val commonName: String) { //todo rename to MessageOrigin, remove BTTV
     GOODGAME("goodgame"),

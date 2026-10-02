@@ -13,8 +13,8 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
 
 /**
- * Фильтрует сообщения от пользователей в игнор-листе.
- * Баны хранятся в формате 'authorId#origin (optionalAuthorName)'.
+ * Filters messages from users in the ignore list.
+ * Bans are stored in the 'authorId#origin (optionalAuthorName)' format.
  */
 class IgnoreFilter(private val config: Configuration) : MessageFilter<ChatMessage> {
 
