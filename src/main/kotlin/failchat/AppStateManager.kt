@@ -73,7 +73,13 @@ class AppStateManager(private val deps: Dependencies) {
 
         // Twitch
         checkEnabled(TWITCH)?.let { channelName ->
-            val chatClient = deps.twitchChatClient.invoke(channelName)
+            // A failure of one origin must not prevent the other origins from starting
+            val chatClient = try {
+                deps.twitchChatClient.invoke(channelName)
+            } catch (t: Throwable) {
+                logger.error("Failed to create twitch chat client. channel name: {}", channelName, t)
+                return@let
+            }
             initializedChatClients.put(TWITCH, chatClient)
             viewersCountLoaders.add(deps.twitchViewersCountLoader.invoke(channelName))
 
@@ -126,7 +132,12 @@ class AppStateManager(private val deps: Dependencies) {
                 return@let
             }
 
-            val chatClient = deps.ggChatClient.invoke(channel)
+            val chatClient = try {
+                deps.ggChatClient.invoke(channel)
+            } catch (t: Throwable) {
+                logger.error("Failed to create goodgame chat client. channel name: {}", channelName, t)
+                return@let
+            }
 
             initializedChatClients.put(GOODGAME, chatClient)
 
@@ -137,7 +148,12 @@ class AppStateManager(private val deps: Dependencies) {
 
         // Youtube
         checkEnabled(YOUTUBE)?.let { videoId ->
-            val chatClient = deps.youtubeChatClient.invoke(videoId)
+            val chatClient = try {
+                deps.youtubeChatClient.invoke(videoId)
+            } catch (t: Throwable) {
+                logger.error("Failed to create youtube chat client. video id: {}", videoId, t)
+                return@let
+            }
             initializedChatClients.put(YOUTUBE, chatClient)
             viewersCountLoaders.add(YoutubeViewersCountLoader(videoId, deps.youtubeClient))
         }

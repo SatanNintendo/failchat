@@ -289,11 +289,11 @@ class Dependencies {
     val twitchApiClient = TwitchApiClient(
         httpClient = okHttpClient,
         objectMapper = objectMapper,
-        clientId = configuration.getString(ConfigKeys.Twitch.clientId)
+        clientId = configuration.getString(ConfigKeys.Twitch.clientId, "")
     )
     val tokenAwareTwitchApiClient = TokenAwareTwitchApiClient(
         twitchApiClient = twitchApiClient,
-        clientSecret = configuration.getString(ConfigKeys.Twitch.clientSecret),
+        clientSecret = configuration.getString(ConfigKeys.Twitch.clientSecret, ""),
         tokenContainer = ConfigurationTokenContainer(configuration)
     )
     val twitchGlobalEmoticonLoader = TwitchGlobalEmoticonLoader(tokenAwareTwitchApiClient)
@@ -305,8 +305,8 @@ class Dependencies {
             userName = channelName,
             ircAddress = configuration.getString("twitch.irc-address"),
             ircPort = configuration.getInt("twitch.irc-port"),
-            botName = configuration.getString("twitch.bot-name"),
-            botPassword = configuration.getString("twitch.bot-password"),
+            botName = configuration.getString("twitch.bot-name", ""),
+            botPassword = configuration.getString("twitch.bot-password", ""),
             twitchEmoticonHandler = twitchEmoticonHandler,
             messageIdGenerator = messageIdGenerator,
             bttvEmoticonHandler = bttvEmoticonHandler,
