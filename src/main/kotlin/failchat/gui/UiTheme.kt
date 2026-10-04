@@ -1,6 +1,7 @@
 package failchat.gui
 
 import failchat.ConfigKeys
+import javafx.application.Platform
 import javafx.collections.ListChangeListener
 import javafx.scene.Node
 import javafx.scene.Parent
@@ -8,6 +9,9 @@ import javafx.scene.Scene
 import javafx.scene.control.ComboBox
 import javafx.scene.control.Label
 import javafx.scene.control.Labeled
+import javafx.scene.control.ScrollPane
+import javafx.scene.control.TabPane
+import javafx.scene.control.TitledPane
 import javafx.scene.control.ListCell
 import javafx.scene.layout.Region
 import javafx.scene.paint.Color
@@ -138,6 +142,10 @@ object UiTheme {
         installThemeSelector(scene)
         applyDirectColors(scene.root)
         controls[scene]?.let { refreshThemeControls(it) }
+
+        // On the first launch the control skins (TabPane, ScrollPane, ...) do not exist yet, so nodes
+        // created by them are missed by the pass above. Repeat it once the first CSS/layout pulse is done.
+        Platform.runLater { applyDirectColors(scene.root) }
     }
 
     private fun refreshForLanguageChange() {
@@ -161,6 +169,18 @@ object UiTheme {
         fun walk(node: Node) {
             if (node is Text && node.parent !is Labeled && !node.fillProperty().isBound) {
                 runCatching { node.fill = foreground }
+            }
+            // The content of tabs / scroll panes / titled panes becomes a child of the control only after its
+            // skin is created (after the first layout pass). Walk it explicitly, otherwise on the first launch
+            // the Text nodes of the settings tabs keep their default color until the theme is switched.
+            if (node is TabPane) {
+                node.tabs.forEach { tab -> tab.content?.let(::walk) }
+            }
+            if (node is ScrollPane) {
+                node.content?.let(::walk)
+            }
+            if (node is TitledPane) {
+                node.content?.let(::walk)
             }
             if (node is Parent) {
                 node.childrenUnmodifiable.toList().forEach(::walk)
