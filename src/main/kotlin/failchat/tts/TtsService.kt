@@ -2,6 +2,7 @@ package failchat.tts
 
 import failchat.ConfigKeys
 import javafx.application.Platform
+import javafx.scene.media.EqualizerBand
 import javafx.scene.media.Media
 import javafx.scene.media.MediaPlayer
 import mu.KotlinLogging
@@ -23,6 +24,13 @@ class TtsService(
 
     private companion object {
         val logger = KotlinLogging.logger {}
+
+        /**
+         * Configured volume: 0.0 .. MAX_VOLUME, where 1.0 is the "normal" 100% level (the middle of the slider).
+         * Everything above 1.0 is a boost, which is done with the JavaFX audio equalizer because
+         * MediaPlayer.volume cannot exceed 1.0.
+         */
+        const val MAX_VOLUME = 2.0
     }
 
     private val stopped = AtomicBoolean(false)
@@ -173,7 +181,7 @@ class TtsService(
                     }
 
                     currentPlayer = player
-                    player.volume = volume
+                    applyVolume(player, volume)
 
                     player.setOnReady {
                         if (stopped.get() || cancelled.get()) {
@@ -240,9 +248,29 @@ class TtsService(
         }
     }
 
+    /**
+     * volume <= 1.0: regular player volume.
+     * volume > 1.0: player volume stays at 1.0 and the signal is amplified with the equalizer
+     * (all bands get the same positive gain). 2.0 is about +6 dB.
+     */
+    private fun applyVolume(player: MediaPlayer, volume: Double) {
+        player.volume = volume.coerceIn(0.0, 1.0)
+        if (volume <= 1.0) return
+
+        try {
+            val gainDb = (20.0 * Math.log10(volume))
+                .coerceIn(0.0, EqualizerBand.MAX_GAIN)
+            val equalizer = player.audioEqualizer
+            equalizer.isEnabled = true
+            equalizer.bands.forEach { it.gain = gainDb }
+        } catch (t: Throwable) {
+            logger.warn("Failed to apply TTS volume boost", t)
+        }
+    }
+
     private fun readVolume(): Double {
         return try {
-            configuration.getDouble(ConfigKeys.Tts.volume).coerceIn(0.0, 1.0)
+            configuration.getDouble(ConfigKeys.Tts.volume).coerceIn(0.0, MAX_VOLUME)
         } catch (t: Throwable) {
             logger.debug("Invalid TTS volume setting; using default", t)
             1.0

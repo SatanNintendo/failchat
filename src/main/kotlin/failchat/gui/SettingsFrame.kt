@@ -397,7 +397,7 @@ class SettingsFrame(
             logger.warn("Invalid TTS volume; using default", t)
             1.0
         }
-        ttsVolume.value = (configuredTtsVolume.coerceIn(0.0, 1.0) * 100.0)
+        ttsVolume.value = (configuredTtsVolume.coerceIn(0.0, 2.0) * 100.0)
         ttsVolumeText.text = "${ttsVolume.value.toInt()}%"
         ttsVoice.isDisable = !ttsEnabled.isSelected
         ttsKey.isDisable = !ttsEnabled.isSelected
@@ -472,7 +472,7 @@ class SettingsFrame(
         config.setProperty(ConfigKeys.Tts.enabled, ttsEnabled.isSelected)
         config.setProperty(ConfigKeys.Tts.voice, configuredTtsVoice.ifEmpty { "Alena" })
         config.setProperty(ConfigKeys.Tts.key, ttsKey.text.trim())
-        config.setProperty(ConfigKeys.Tts.volume, (ttsVolume.value / 100.0).coerceIn(0.0, 1.0))
+        config.setProperty(ConfigKeys.Tts.volume, (ttsVolume.value / 100.0).coerceIn(0.0, 2.0))
         saveObsSettingsToConfiguration()
         config.setProperty(ConfigKeys.language, languageSelector.value?.code ?: UiLanguage.ENGLISH)
 

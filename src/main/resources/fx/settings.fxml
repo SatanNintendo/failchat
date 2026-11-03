@@ -282,9 +282,10 @@
                                                                     </HBox.margin>
                                                                 </Text>
                                                                 <Slider fx:id="tts_volume" blockIncrement="5.0"
-                                                                        max="100.0" min="0.0" value="100.0"
+                                                                        max="200.0" min="0.0" value="100.0"
                                                                         prefWidth="180.0" showTickLabels="false"
-                                                                        showTickMarks="false">
+                                                                        showTickMarks="true" majorTickUnit="100.0"
+                                                                        minorTickCount="0">
                                                                 </Slider>
                                                                 <Text fx:id="tts_volume_text" strokeType="OUTSIDE"
                                                                       strokeWidth="0.0" text="100%"
